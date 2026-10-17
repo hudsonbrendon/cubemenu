@@ -20,6 +20,7 @@ def system_area(apploader, region=3):
     sa[0x20:0x20 + len(TITLE)] = TITLE
     fst_off, fst = 0x7000, struct.pack(">BBHII", 1, 0, 0, 0, 1) + b"\0" * 4
     struct.pack_into(">III", sa, 0x424, fst_off, len(fst), len(fst))
+    struct.pack_into(">II", sa, 0x434, 0x00400000, 0x56FE8000)   # user area position / length (a full disc), never 0 on real discs
     sa[fst_off:fst_off + len(fst)] = fst
     struct.pack_into(">I", sa, 0x444, 0x01800000)      # bi2: simulated memory size
     struct.pack_into(">I", sa, 0x458, region)          # bi2: region (3 = any, 1 = NTSC-U for the emulator)

@@ -3,7 +3,7 @@
   python3 -m tools.cube_card scan    <sd_root>              list the games found under /games
   python3 -m tools.cube_card fetch   <sd_root> [--art] [--synopsis] [--videos] [--music] [--force] [--only ID,..]
   python3 -m tools.cube_card build   <sd_root>              convert everything in cubemenu/src into console assets
-  python3 -m tools.cube_card install <sd_root> [--iso boot.iso] [--dol cubemenu.dol]   make Cube Menu boot first
+  python3 -m tools.cube_card install <sd_root> [--mode swiss|iso]   make Cube Menu come up at power on
 
 Games live where Swiss expects them: /games/<Name>/game.iso (or disc1.iso + disc2.iso). The folder name is the
 title shown in the menu. Downloads go to /cubemenu/src/<GAMEID>/, console-ready files to /cubemenu/games/<GAMEID>/.
@@ -73,7 +73,7 @@ def cmd_build(a):
 
 def cmd_install(a):
     from tools.cube_card import build
-    build.install(a.sd, a.iso, a.dol)
+    build.install(a.sd, a.iso, a.dol, a.mode)
 
 
 def main():
@@ -85,7 +85,10 @@ def main():
     s.add_argument("--only"); s.set_defaults(fn=cmd_fetch)
     s = sub.add_parser("build"); s.add_argument("sd"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_build)
     s = sub.add_parser("install"); s.add_argument("sd"); s.add_argument("--iso", default="dist/boot.iso")
-    s.add_argument("--dol", default="dist/cubemenu.dol"); s.set_defaults(fn=cmd_install)
+    s.add_argument("--dol", default="dist/cubemenu.dol")
+    s.add_argument("--mode", choices=("swiss", "iso"), default="swiss",
+                   help="swiss: Swiss starts the menu at power on (default); iso: replace /boot.iso")
+    s.set_defaults(fn=cmd_install)
     a = p.parse_args()
     a.fn(a)
 

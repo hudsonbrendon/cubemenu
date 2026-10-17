@@ -178,6 +178,9 @@ static void meta_line(char *buf, int n, const game_t *g) {
 
 static void before_jump(void) { fs_shutdown(); }
 
+/* Swiss on its own: an empty Autoload cancels the "load at startup" that brings Swiss back to the menu */
+static const char *NO_AUTOLOAD[1] = {"Autoload="};
+
 static void do_boot(void) {
     game_t *g = &g_games[launch_game];
     char err[96], launch_path[256], arg[300];
@@ -209,7 +212,7 @@ static void open_swiss(void) {
     char err[96];
     settings_save();
     clip_stop(); assets_stop(); audio_stop();
-    boot_dol(swiss, 0, NULL, before_jump, err, sizeof err);
+    boot_dol(swiss, 1, NO_AUTOLOAD, before_jump, err, sizeof err);
     clip_init(); assets_init(); audio_init();
     ui_toast(err);
 }
@@ -996,7 +999,7 @@ void app_init(void) {
     if (card_ok && (PAD_ButtonsHeld(0) & PAD_BUTTON_B)) {
         const char *swiss = boot_find_swiss();
         char err[96];
-        if (swiss) boot_dol(swiss, 0, NULL, before_jump, err, sizeof err);
+        if (swiss) boot_dol(swiss, 1, NO_AUTOLOAD, before_jump, err, sizeof err);
     }
     settings_load();
     theme_set(g_set.theme);

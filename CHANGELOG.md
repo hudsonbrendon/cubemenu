@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-10-17
+
+- Install through Swiss: GC Loader keeps booting Swiss's own `boot.iso`, and `cube-card install`
+  sets Swiss's *Load at startup* to `cubemenu.dol`. Cube Menu's `boot.iso` still froze on the
+  GameCube logo on a real console after 0.1.1, so it is now opt-in (`install --mode iso`) and
+  experimental; its header now fills the user area fields that real discs carry.
+- "Open Swiss" and holding B at power on pass an empty `Autoload=`, so Swiss does not bounce back
+  to the menu.
+
 ## 0.1.1 - 2026-10-17
 
 - boot.iso: fix the console freezing on the GameCube logo. The apploader wrote stale data-cache lines

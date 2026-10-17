@@ -127,16 +127,53 @@ def build(sd, games, force=False, log=print):
     os.makedirs(os.path.join(base, "music"), exist_ok=True)
 
 
-def install(sd, iso, dol):
-    """Make Cube Menu the first thing GC Loader boots; the previous /boot.iso (Swiss) is kept."""
-    boot = os.path.join(sd, "boot.iso")
-    keep = os.path.join(sd, "swiss", "boot-swiss.iso")
-    if os.path.exists(boot) and not os.path.exists(keep):
-        with open(boot, "rb") as f: head = f.read(0x60)
-        if b"CUBEMENU" not in head and b"Cube Menu" not in head:
-            shutil.copyfile(boot, keep)
-            print(f"  kept the previous boot.iso as {keep}")
-    shutil.copyfile(iso, boot)
+SWISS_INI = os.path.join("swiss", "settings", "global.ini")
+MENU_DOL = "/cubemenu/cubemenu.dol"
+
+
+def set_swiss_autoload(sd, value):
+    """Swiss's "Load at startup" (Autoload= in global.ini). The previous file is kept once as .cubemenu-bak."""
+    ini = os.path.join(sd, SWISS_INI)
+    if not os.path.exists(ini):
+        print(f"  !! {ini} not found: open Swiss once and save its settings, then run install again")
+        return False
+    text = open(ini, newline="").read()
+    bak = ini + ".cubemenu-bak"
+    if not os.path.exists(bak): open(bak, "w", newline="").write(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    if any(l.startswith("Autoload=") for l in lines):
+        lines = [f"Autoload={value}" if l.startswith("Autoload=") else l for l in lines]
+    else:
+        end = next((i for i, l in enumerate(lines) if "Settings End" in l), len(lines))
+        lines.insert(end, f"Autoload={value}")
+    open(ini, "w", newline="").write(nl.join(lines))
+    print(f"  Swiss will load {value or '(nothing)'} at startup")
+    return True
+
+
+def install(sd, iso, dol, mode="swiss"):
+    """mode "swiss" (default): GC Loader keeps booting Swiss's own boot.iso and Swiss starts the menu
+    at power on. mode "iso": Cube Menu's boot.iso replaces /boot.iso (Swiss's is kept)."""
     os.makedirs(os.path.join(sd, "cubemenu"), exist_ok=True)
     shutil.copyfile(dol, os.path.join(sd, "cubemenu", "cubemenu.dol"))
-    print(f"  installed {boot} and cubemenu/cubemenu.dol")
+    print("  installed cubemenu/cubemenu.dol")
+    boot = os.path.join(sd, "boot.iso")
+    keep = os.path.join(sd, "swiss", "boot-swiss.iso")
+    if mode == "iso":
+        if os.path.exists(boot) and not os.path.exists(keep):
+            with open(boot, "rb") as f: head = f.read(0x60)
+            if b"Cube Menu" not in head:
+                shutil.copyfile(boot, keep)
+                print(f"  kept the previous boot.iso as {keep}")
+        shutil.copyfile(iso, boot)
+        set_swiss_autoload(sd, "")
+        print(f"  installed {boot}")
+        return
+    # back to Swiss's boot.iso if an earlier install replaced it
+    if os.path.exists(boot):
+        with open(boot, "rb") as f: head = f.read(0x60)
+        if b"Cube Menu" in head and os.path.exists(keep):
+            shutil.copyfile(keep, boot)
+            print("  restored Swiss's boot.iso")
+    set_swiss_autoload(sd, "gcldr:" + MENU_DOL)

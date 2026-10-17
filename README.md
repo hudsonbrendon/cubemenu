@@ -62,7 +62,7 @@ your games laid out the way Swiss likes them, and Swiss's `boot.dol` on the card
 
 ```
 SD card
-├── boot.iso              <- Cube Menu (GC Loader boots this)
+├── boot.iso              <- Swiss (GC Loader boots it; Swiss starts Cube Menu)
 ├── games/
 │   ├── F-Zero GX/game.iso
 │   ├── Resident Evil 4/disc1.iso
@@ -81,11 +81,13 @@ SD card
    python3 -m tools.cube_card scan    /Volumes/GAMECUBE    # what is on the card
    python3 -m tools.cube_card fetch   /Volumes/GAMECUBE    # covers, discs, screenshots, synopses, clips, music
    python3 -m tools.cube_card build   /Volumes/GAMECUBE    # convert for the console
-   python3 -m tools.cube_card install /Volumes/GAMECUBE --iso boot.iso --dol cubemenu.dol
+   python3 -m tools.cube_card install /Volumes/GAMECUBE --dol cubemenu.dol
    ```
 
-   `install` keeps the `boot.iso` that was there (Swiss) as `swiss/boot-swiss.iso`. To go back to booting
-   straight into Swiss, copy it back to `/boot.iso`.
+   `install` copies the menu to `/cubemenu/cubemenu.dol` and turns on Swiss's **Load at startup**
+   (`Autoload=` in `swiss/settings/global.ini`, the old file is kept as `global.ini.cubemenu-bak`), so
+   GC Loader keeps booting your Swiss `boot.iso` and Swiss opens Cube Menu. To stop it, set
+   *Load at startup* back to none in Swiss's settings.
 4. Eject the card, turn the GameCube on.
 
 **Other devices.** `cubemenu.dol` reads the card from GC Loader, SD2SP2 or an SD Gecko (slot B or A),
@@ -109,9 +111,9 @@ file management, other devices).
 
 ## How it works
 
-- **Boot**: `boot.iso` is a tiny GameCube disc image: header, a 600-byte apploader written for this
-  project, and the menu's DOL. GC Loader presents it as the disc, the console's IPL runs the apploader,
-  the apploader reads the DOL into memory and jumps to it.
+- **Boot**: GC Loader boots Swiss as usual and Swiss's *Load at startup* opens `cubemenu.dol`. (The
+  release also has an experimental `boot.iso` with its own apploader; it does not boot on a real
+  console yet, see the changelog.)
 - **Library**: the menu scans `/games/*/` for `.iso` / `.gcm` and reads each header (game ID, disc number).
   Art and metadata come from `/cubemenu/games/<GAMEID>/`, written by the card tool.
 - **Launching**: the menu loads Swiss's `boot.dol` and starts it with one argument,

@@ -25,6 +25,7 @@ static AESNDPB *voice;
 static short *sfx_pcm[SFX_COUNT];
 static int sfx_len[SFX_COUNT];
 #define SFX_RATE 32000
+static float clampf_(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 static s32 reader(void *cb, void *dst, s32 len) {
     (void)cb;
@@ -64,6 +65,26 @@ static void synth(int id, float f0, float f1, float dur, float vol, int harmonic
     sfx_pcm[id] = p; sfx_len[id] = n * 2;
 }
 
+/* boot chime: a quick bright arpeggio that settles on a soft chord */
+static void synth_chime(int id) {
+    static const float notes[] = {523.25f, 659.25f, 783.99f, 1046.5f, 1318.5f};
+    const float dur = 1.6f;
+    int n = (int)(SFX_RATE * dur) & ~15;
+    short *p = memalign(32, n * 2);
+    for (int i = 0; i < n; i++) {
+        float t = (float)i / SFX_RATE, s = 0;
+        for (int k = 0; k < 5; k++) {
+            float t0 = k * 0.075f;
+            if (t < t0) continue;
+            float tt = t - t0, env = (tt < 0.01f ? tt / 0.01f : 1.0f) * expf(-2.6f * tt);
+            s += env * (sinf(2 * M_PI * notes[k] * tt) + 0.25f * sinf(2 * M_PI * notes[k] * 2.0f * tt)) * 0.22f;
+        }
+        p[i] = (short)(clampf_(s, -1, 1) * 32767 * 0.6f);
+    }
+    DCFlushRange(p, n * 2);
+    sfx_pcm[id] = p; sfx_len[id] = n * 2;
+}
+
 static void scan_menu_music(void) {
     char path[96];
     DIR *d = opendir(fs_path(path, sizeof path, "/cubemenu/music"));
@@ -86,6 +107,7 @@ void audio_init(void) {
     synth(SFX_BACK, 700, 420, 0.14f, 0.26f, 1);
     synth(SFX_OPEN, 520, 1040, 0.22f, 0.28f, 1);
     synth(SFX_LAUNCH, 330, 990, 0.9f, 0.32f, 1);
+    synth_chime(SFX_INTRO);
     scan_menu_music();
 }
 

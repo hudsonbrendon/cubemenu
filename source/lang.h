@@ -88,6 +88,8 @@ enum {
     S_NO_FAVORITES_HINT,
     S_NO_RECENT,
     S_NO_RECENT_HINT,
+    S_FAV_ADDED,
+    S_FAV_REMOVED,
     S_COUNT
 };
 #define LANG_COUNT 3

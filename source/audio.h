@@ -1,7 +1,7 @@
 #pragma once
 #include <stdbool.h>
 
-enum { SFX_MOVE, SFX_SELECT, SFX_BACK, SFX_OPEN, SFX_LAUNCH, SFX_COUNT };
+enum { SFX_MOVE, SFX_SELECT, SFX_BACK, SFX_OPEN, SFX_LAUNCH, SFX_INTRO, SFX_COUNT };
 
 void audio_init(void);
 void audio_update(float dt);          /* fades, menu music rotation */

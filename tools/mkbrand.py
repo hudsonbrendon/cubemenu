@@ -1,5 +1,5 @@
 """Cube Menu brand: an isometric cube-in-a-cube emblem (in the spirit of the GameCube logo) over the
-CUBE MENU wordmark. Writes assets/brand/*.png and the textures the menu embeds (data/logo*.bin)."""
+CUBE MENU wordmark (Jost Bold, a geometric sans in the vein of the console's lettering). Writes assets/brand/*.png and the textures the menu embeds (data/logo*.bin)."""
 import math, os, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -7,7 +7,7 @@ from tools.cube_card import gx
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INDIGO = ((150, 136, 236), (98, 82, 200), (62, 49, 150))      # top, left, right faces
-FUTURA = "/System/Library/Fonts/Supplemental/Futura.ttc"
+JOST = os.path.join(ROOT, "assets", "fonts", "Jost.ttf")      # geometric sans, OFL
 
 
 def hexpts(cx, cy, s):
@@ -52,7 +52,8 @@ def emblem(size, colors=INDIGO, ss=4):
 
 
 def wordmark(text, height, color, tracking=0.06):
-    font = ImageFont.truetype(FUTURA, int(height * 1.32), index=2)     # Futura Bold
+    font = ImageFont.truetype(JOST, int(height * 1.32))
+    font.set_variation_by_name("Bold")
     asc, desc = font.getmetrics()
     widths = [font.getlength(ch) for ch in text]
     track = height * tracking

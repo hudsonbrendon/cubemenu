@@ -25,6 +25,11 @@
 #define CUBEMENU_VERSION "dev"
 #endif
 
+enum { I_H_VISUAL, I_THEME, I_LANG, I_VIEW, I_BGVIDEO, I_SHOWDISC, I_LAUNCHANIM,
+       I_H_AUDIO, I_GAMEMUSIC, I_MENUMUSIC, I_SFX, I_VOLUME,
+       I_H_LIBRARY, I_SORT,
+       I_H_SYSTEM, I_CLOCK24, I_CLOCKADJ, I_SAVER, I_OPENSWISS, I_RESET, I_COUNT };
+
 static int screen = SCR_INTRO, prev_screen = SCR_LIBRARY;
 static float screen_t;
 static int view[MAX_GAMES], nview;
@@ -226,6 +231,8 @@ static void request_launch(int gi) {
 
 static void draw_intro(void) {
     float t = screen_t;
+    static bool chimed;
+    if (!chimed && t > 1.15f) { chimed = true; audio_sfx(SFX_INTRO); }
     draw_rect_grad(0, 0, SCREEN_W, SCREEN_H, 0x000000FF, col_mix(0x000000FF, th->bg_top, clampf(t / 1.5f, 0, 1)));
     /* a cube tumbles in from the left and lands in the middle (a nod to the console's boot) */
     float k = clampf(t / 1.25f, 0, 1), e = ease_out(k);
@@ -308,6 +315,8 @@ static void draw_coverflow(void) {
 /* ---------------- library: grid ---------------- */
 
 #define GRID_COLS 6
+#define GRID_CW 92
+#define GRID_RH 122
 static float grid_scroll;
 
 static void draw_cover2d(int g, float x, float y, float w, float h, float a) {
@@ -322,17 +331,17 @@ static void draw_cover2d(int g, float x, float y, float w, float h, float a) {
 }
 
 static void draw_grid(void) {
-    const float cw = 92, ch = 130, gx0 = (SCREEN_W - GRID_COLS * cw) / 2 + 6, gy0 = 84;
+    const float cw = GRID_CW, gx0 = (SCREEN_W - GRID_COLS * cw) / 2 + 8, gy0 = 90;
     int row = cur / GRID_COLS;
-    float target = row > 0 ? (row - 0.35f) * (ch + 14) : 0;
+    float target = row > 0 ? (row - 0.5f) * GRID_RH : 0;
     if (target < 0) target = 0;
     grid_scroll += (target - grid_scroll) * 0.18f;
     for (int i = 0; i < nview; i++) {
         int r = i / GRID_COLS, c = i % GRID_COLS;
-        float y = gy0 + r * (ch + 14) - grid_scroll;
-        if (y < 40 || y > 340) continue;
-        float a = clampf((y - 40) / 40, 0, 1) * clampf((340 - y) / 40, 0, 1);
-        float x = gx0 + c * cw, w = 80, h = 113;
+        float y = gy0 + r * GRID_RH - grid_scroll;
+        if (y < 30 || y > 250) continue;
+        float a = clampf((y - 30) / 50, 0, 1) * clampf((250 - y) / 40, 0, 1);
+        float x = gx0 + c * cw, w = 74, h = 104;
         if (i == cur) {
             float s = 1.08f;
             float sw = w * s, sh = h * s;
@@ -464,7 +473,7 @@ static void update_library(uint32_t p, float dt) {
         return;
     }
     if (!nview) {
-        if (p & BTN_X) { screen = SCR_SETTINGS; screen_t = 0; audio_sfx(SFX_OPEN); }
+        if (p & BTN_X) { screen = SCR_SETTINGS; screen_t = 0; set_cur = I_THEME; audio_sfx(SFX_OPEN); }
         if (p & BTN_START) { screen = SCR_SYSTEM; screen_t = 0; audio_sfx(SFX_OPEN); }
         if (p & (BTN_L | BTN_R)) { filter = (filter + (p & BTN_R ? 1 : FILTER_COUNT - 1)) % FILTER_COUNT; rebuild_view(NULL); audio_sfx(SFX_OPEN); }
         return;
@@ -489,13 +498,13 @@ static void update_library(uint32_t p, float dt) {
     }
     if (p & BTN_A) request_launch(view[cur]);
     if (p & BTN_Y) { screen = SCR_DETAILS; screen_t = 0; details_scroll = 0; details_shot = 0; audio_sfx(SFX_OPEN); }
-    if (p & BTN_X) { screen = SCR_SETTINGS; screen_t = 0; audio_sfx(SFX_OPEN); }
+    if (p & BTN_X) { screen = SCR_SETTINGS; screen_t = 0; set_cur = I_THEME; audio_sfx(SFX_OPEN); }
     if (p & BTN_START) { screen = SCR_SYSTEM; screen_t = 0; audio_sfx(SFX_OPEN); }
     if (p & BTN_Z) {
         game_t *g = cur_game();
         g->favorite = !g->favorite;
         stats_save();
-        ui_toast(g->favorite ? "★" : "-");
+        ui_toast(tr(g->favorite ? S_FAV_ADDED : S_FAV_REMOVED));
         audio_sfx(SFX_SELECT);
         if (filter == FILTER_FAV) rebuild_view(g->id);
     }
@@ -560,7 +569,7 @@ static void update_details(uint32_t p) {
     assets_want_shots(view[cur]);
 }
 
-static float kv_w = 124;
+static float kv_w = 140;
 static void kv(float x, float y, const char *k, const char *v) {
     draw_text_fit(&g_font_s, x, y, kv_w - 8, th->text_dim, k);
     draw_text_fit(&g_font_s, x + kv_w, y, 270 - kv_w, th->text_hi, v && *v ? v : "-");
@@ -640,10 +649,7 @@ static void draw_details(void) {
 
 /* ---------------- settings ---------------- */
 
-enum { I_H_VISUAL, I_THEME, I_LANG, I_VIEW, I_BGVIDEO, I_SHOWDISC, I_LAUNCHANIM,
-       I_H_AUDIO, I_GAMEMUSIC, I_MENUMUSIC, I_SFX, I_VOLUME,
-       I_H_LIBRARY, I_SORT,
-       I_H_SYSTEM, I_CLOCK24, I_CLOCKADJ, I_SAVER, I_OPENSWISS, I_RESET, I_COUNT };
+
 
 static bool is_header(int i) { return i == I_H_VISUAL || i == I_H_AUDIO || i == I_H_LIBRARY || i == I_H_SYSTEM; }
 
@@ -718,7 +724,7 @@ static void update_settings(uint32_t p) {
         } else { change_item(set_cur, 1); audio_sfx(SFX_MOVE); }
     }
     if (p & (BTN_B | BTN_START)) {
-        ui_toast(tr(settings_save() ? S_SAVED : S_SAVE_FAILED));
+        if (fs_writable()) ui_toast(tr(settings_save() ? S_SAVED : S_SAVE_FAILED));
         screen = SCR_LIBRARY;
         audio_sfx(SFX_BACK);
     }
@@ -808,7 +814,7 @@ static void draw_system(void) {
         game_t *g = &g_games[all[i]];
         if (!g->playtime) break;
         float yy = ry + 40 + shown * 40;
-        draw_text_fit(&g_font_s, rx, yy, 200, th->text, g->name);
+        draw_text_fit(&g_font_s, rx, yy, 172, th->text, g->name);
         fmt_playtime(buf, sizeof buf, g->playtime);
         draw_text_right(&g_font_s, rx + 250, yy, th->text_dim, buf);
         float bw = 250 * (top ? (float)g->playtime / top : 0);
@@ -847,11 +853,11 @@ static void draw_launch(float dt) {
     float led = clampf((t - LAUNCH_T_LED) / 0.15f, 0, 1);
     float zoom = 0.9f + 0.1f * ease_out(fade_in);
 
-    gfx_3d(34, (vec3){0, 300, 470}, (vec3){0, 40, 0});
+    gfx_3d(32, (vec3){0, 290, 430}, (vec3){0, 52, 0});
     gfx_push();
     gfx_scale(zoom, zoom, zoom);
     gfx_rotate('y', yaw);
-    console3d(th->console, assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, fade_in);
+    console3d(col_scale(th->console, 1.3f), assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, fade_in);
     gfx_pop();
     gfx_2d();
 
@@ -955,5 +961,9 @@ void app_frame(float dt) {
     }
     if (saver) draw_saver();
     ui_toast_draw();
+    if (demo) {   /* tour recordings: the app frame number as a 20-bit strip on the last 4 rows */
+        for (int b = 0; b < 20; b++)
+            draw_rect(b * 32, SCREEN_H - 4, 32, 4, (demo_frame >> b) & 1 ? 0xFFFFFFFF : 0x000000FF);
+    }
     gfx_end();
 }

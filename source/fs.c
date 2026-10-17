@@ -61,6 +61,8 @@ char *fs_path(char *buf, int n, const char *rel) {
     return buf;
 }
 
+bool fs_writable(void) { return root[0] && strcmp(root, "dvd"); }
+
 bool fs_exists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
@@ -80,6 +82,7 @@ void *fs_read_all(const char *path, int *len) {
 }
 
 bool fs_write_all(const char *path, const void *data, int len) {
+    if (!fs_writable()) return false;
     char tmp[256];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     FILE *f = fopen(tmp, "wb");

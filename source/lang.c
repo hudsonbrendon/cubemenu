@@ -92,6 +92,8 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "Aperte Z num jogo para marcar como favorito",
         "Nenhum jogo jogado ainda",
         "Os jogos que você iniciar aparecem aqui",
+        "Adicionado aos favoritos",
+        "Removido dos favoritos",
     },
     {
         "Play",
@@ -182,6 +184,8 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "Press Z on a game to mark it as a favorite",
         "Nothing played yet",
         "Games you start show up here",
+        "Added to favorites",
+        "Removed from favorites",
     },
     {
         "Jugar",
@@ -272,6 +276,8 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "Pulsa Z en un juego para marcarlo como favorito",
         "Aún no has jugado nada",
         "Los juegos que inicies aparecerán aquí",
+        "Añadido a favoritos",
+        "Quitado de favoritos",
     },
 };
 

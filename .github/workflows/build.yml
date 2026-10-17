@@ -1,0 +1,30 @@
+name: build
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/extremscorner/libogc2:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends genisoimage python3 python3-pil python3-numpy zip
+      - name: Self-tests (texture encoder, card tool)
+        run: |
+          python3 tools/cube_card/gx.py
+          python3 tools/cube_card/fetch.py
+      - name: Apploader + menu
+        run: |
+          make -C apploader
+          make
+      - name: boot.iso
+        run: python3 tools/mkiso.py dist/cubemenu.dol dist/boot.iso
+      - name: Package
+        run: sh tools/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cubemenu
+          path: dist/cubemenu-*.zip

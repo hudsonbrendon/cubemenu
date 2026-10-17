@@ -158,7 +158,8 @@ def fetch_video(g, src, force=False, log=print):
     dst = os.path.join(src, "video.mp4")
     if os.path.exists(dst) and not force: return
     out = os.path.join(src, "dl_video.%(ext)s")
-    for search, maxdur in ((f"ytsearch6:{_query(g)} gamecube gameplay", 900), (f"ytsearch10:{_query(g)} gameplay", 2400)):
+    for search, maxdur in ((f"ytsearch6:{_query(g)} gamecube gameplay", 900), (f"ytsearch10:{_query(g)} gameplay", 2400),
+                           (f"ytsearch8:{_query(g)} gamecube trailer", 600)):
         r = _ytdlp(search, out, "bv*[height<=480][ext=mp4]/bv*[height<=480]/b[height<=480]/b",
                    ["--match-filter", f"duration<{maxdur} & duration>60"])
         got = _found(src, "dl_video")
@@ -176,9 +177,11 @@ def fetch_music(g, src, force=False, log=print):
     dst = os.path.join(src, "music.mp3")
     if os.path.exists(dst) and not force: return
     out = os.path.join(src, "dl_music.%(ext)s")
-    r = _ytdlp(f"ytsearch6:{_query(g)} gamecube ost main theme", out, "bestaudio/best",
-               ["--match-filter", "duration<420 & duration>45", "-x", "--audio-format", "mp3", "--audio-quality", "5"])
-    got = _found(src, "dl_music")
+    for search in (f"ytsearch6:{_query(g)} gamecube ost main theme", f"ytsearch8:{_query(g)} ost title theme"):
+        r = _ytdlp(search, out, "bestaudio/best",
+                   ["--match-filter", "duration<420 & duration>45", "-x", "--audio-format", "mp3", "--audio-quality", "5"])
+        got = _found(src, "dl_music")
+        if got: break
     if not got: log(f"  ?? {g['id']} {g['name']}: no music {(r.stderr or '').strip()[-120:]}"); return
     rr = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", got, "-t", "60", "-ac", "2", "-ar", "32000", "-b:a", "96k",
                          "-af", "afade=t=out:st=57:d=3", dst], capture_output=True)

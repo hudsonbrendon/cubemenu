@@ -7,3 +7,5 @@ apploader/*.map
 __pycache__/
 *.pyc
 .DS_Store
+tour/demo.txt
+tour/settings.ini

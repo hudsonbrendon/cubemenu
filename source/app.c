@@ -22,6 +22,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <ogc/lwp_watchdog.h>
 
 #ifndef CUBEMENU_VERSION
 #define CUBEMENU_VERSION "dev"
@@ -60,6 +61,7 @@ static bool card_ok;
 typedef struct { int frame; uint32_t buttons; } demo_ev;
 static demo_ev *demo;
 static int ndemo, demo_i, demo_frame;
+static bool demo_fps;
 
 static uint32_t button_by_name(const char *s) {
     static const struct { const char *n; uint32_t b; } T[] = {
@@ -77,6 +79,7 @@ static void demo_load(void) {
     demo = calloc(512, sizeof *demo);
     int frame = 0;
     for (char *line = strtok(txt, "\n"); line && ndemo < 512; line = strtok(NULL, "\n")) {
+        if (!strncmp(line, "#fps", 4)) demo_fps = true;
         if (line[0] == '#') continue;
         char btn[16];
         int wait;
@@ -166,7 +169,7 @@ static void meta_line(char *buf, int n, const game_t *g) {
     int k = 0;
     if (g->year) k += snprintf(buf + k, n - k, "%d", g->year);
     if (g->publisher[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", g->publisher);
-    if (g->genre[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", g->genre);
+    if (g->genre[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", game_genre(g, g_set.lang));
     if (g->players[0] && strcmp(g->players, "0")) k += snprintf(buf + k, n - k, "%s%sP", k ? "  ·  " : "", g->players);
     if (g->playtime) { fmt_playtime(pt, sizeof pt, g->playtime); k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", pt); }
 }
@@ -336,15 +339,16 @@ static void draw_cover2d(int g, float x, float y, float w, float h, float a) {
 
 static void draw_grid(void) {
     const float cw = GRID_CW, gx0 = (SCREEN_W - GRID_COLS * cw) / 2 + 8, gy0 = 90;
-    int row = cur / GRID_COLS;
-    float target = row > 0 ? (row - 0.5f) * GRID_RH : 0;
-    if (target < 0) target = 0;
+    int row = cur / GRID_COLS, rows = (nview + GRID_COLS - 1) / GRID_COLS;
+    /* two rows on screen; the cursor row is the lower one unless it is the first */
+    float target = (row > 0 ? row - 1 : 0) * GRID_RH;
+    if (rows > 1 && target > (rows - 2) * GRID_RH) target = (rows - 2) * GRID_RH;
     grid_scroll += (target - grid_scroll) * 0.18f;
     for (int i = 0; i < nview; i++) {
         int r = i / GRID_COLS, c = i % GRID_COLS;
         float y = gy0 + r * GRID_RH - grid_scroll;
-        if (y < 30 || y > 250) continue;
-        float a = clampf((y - 30) / 50, 0, 1) * clampf((250 - y) / 40, 0, 1);
+        if (y < gy0 - 70 || y > gy0 + GRID_RH + 70) continue;
+        float a = clampf((y - (gy0 - 70)) / 70, 0, 1) * clampf((gy0 + GRID_RH + 70 - y) / 70, 0, 1);
         float x = gx0 + c * cw, w = 74, h = 104;
         if (i == cur) {
             float s = 1.08f;
@@ -630,7 +634,7 @@ static void draw_details(void) {
     kv(rx, y, tr(S_PUBLISHER), g->publisher); y += 21;
     snprintf(buf, sizeof buf, "%d", g->year);
     kv(rx, y, tr(S_YEAR), g->year ? buf : NULL); y += 21;
-    kv(rx, y, tr(S_GENRE), g->genre); y += 21;
+    kv(rx, y, tr(S_GENRE), game_genre(g, g_set.lang)); y += 21;
     kv(rx, y, tr(S_PLAYERS), g->players); y += 21;
     if (g->playtime) { fmt_playtime(pt, sizeof pt, g->playtime); kv(rx, y, tr(S_PLAYTIME), pt); }
     else kv(rx, y, tr(S_PLAYTIME), tr(S_NEVER_PLAYED));
@@ -1000,6 +1004,7 @@ void app_init(void) {
 }
 
 void app_frame(float dt) {
+    u64 tf0 = gettime();
     input_update();
     demo_step();
     uint32_t p = input_pressed();
@@ -1041,6 +1046,7 @@ void app_frame(float dt) {
         break;
     }
 
+    u64 tf1 = gettime();
     gfx_begin(th->bg_top);
     switch (screen) {
     case SCR_INTRO: draw_intro(); break;
@@ -1053,6 +1059,20 @@ void app_frame(float dt) {
     }
     if (saver) draw_saver();
     ui_toast_draw();
+    if (demo && demo_fps) {   /* frame time, emulated seconds (perf checks) */
+        static float acc; static int frames; static char fps[24];
+        acc += dt; frames++;
+        if (acc >= 0.5f) { snprintf(fps, sizeof fps, "%.1f fps", frames / acc); acc = 0; frames = 0; }
+        extern float g_ms_gpu, g_ms_vsync;
+        static float upd, drw;
+        u64 tf2 = gettime();
+        upd = upd * 0.9f + 0.1f * ticks_to_microsecs(diff_ticks(tf0, tf1)) / 1000.0f;
+        drw = drw * 0.9f + 0.1f * ticks_to_microsecs(diff_ticks(tf1, tf2)) / 1000.0f;
+        char vm[96];
+        snprintf(vm, sizeof vm, "%s u%.1f d%.1f g%.1f v%.1f", fps, upd, drw, g_ms_gpu, g_ms_vsync);
+        draw_rect(4, 4, 330, 22, 0x000000C0);
+        draw_text(&g_font_s, 8, 5, 0xFFFF00FF, vm);
+    }
     if (demo) {   /* tour recordings: the app frame number as a 20-bit strip on the last 4 rows */
         for (int b = 0; b < 20; b++)
             draw_rect(b * 32, SCREEN_H - 4, 32, 4, (demo_frame >> b) & 1 ? 0xFFFFFFFF : 0x000000FF);

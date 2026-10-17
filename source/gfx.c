@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
+#include <ogc/lwp_watchdog.h>
 
 #define FIFO_SIZE (256 * 1024)
 #define MSTACK 16
@@ -14,6 +15,7 @@ static Mtx view, model, mstack[MSTACK];
 static int msp;
 static int textured = -1;
 static const GXTexObj *bound;
+static volatile bool tex_dirty = true;
 
 uint32_t col_mix(uint32_t a, uint32_t b, float t) {
     uint32_t r = 0;
@@ -98,22 +100,29 @@ static void set_textured(const tex_t *t) {
 }
 
 void gfx_begin(uint32_t clear) {
+    if (tex_dirty) { tex_dirty = false; GX_InvalidateTexAll(); }
     GXColor c = {clear >> 24, clear >> 16, clear >> 8, 255};
     GX_SetCopyClear(c, GX_MAX_Z24);
-    GX_InvalidateTexAll();
     bound = NULL;
     textured = -1;
     gfx_2d();
 }
 
+float g_ms_gpu, g_ms_vsync;   /* last frame: waiting for GX_DrawDone, waiting for vsync */
+
 void gfx_end(void) {
     GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
     GX_SetColorUpdate(GX_TRUE);
     GX_CopyDisp(xfb[fb], GX_TRUE);
+    u64 t0 = gettime();
     GX_DrawDone();
+    u64 t1 = gettime();
     VIDEO_SetNextFramebuffer(xfb[fb]);
     VIDEO_Flush();
     VIDEO_WaitVSync();
+    u64 t2 = gettime();
+    g_ms_gpu = ticks_to_microsecs(diff_ticks(t0, t1)) / 1000.0f;
+    g_ms_vsync = ticks_to_microsecs(diff_ticks(t1, t2)) / 1000.0f;
     fb ^= 1;
 }
 
@@ -172,7 +181,7 @@ bool tex_load(tex_t *t, const char *path) {
         uint32_t size = h[12] << 24 | h[13] << 16 | h[14] << 8 | h[15];
         if (size == (uint32_t)tex_bytes(t->w, t->h, t->fmt) && size < 4 << 20 && (t->data = memalign(32, size))) {
             ok = fread(t->data, 1, size, f) == size;
-            if (ok) { DCFlushRange(t->data, size); tex_init_obj(t); }
+            if (ok) { DCFlushRange(t->data, size); tex_init_obj(t); gfx_invalidate(); }
             else { free(t->data); t->data = NULL; }
         }
     }
@@ -193,7 +202,11 @@ bool tex_create(tex_t *t, int w, int h, int fmt) {
 void tex_update(tex_t *t) {
     DCFlushRange(t->data, tex_bytes(t->w, t->h, t->fmt));
     tex_init_obj(t);
+    gfx_invalidate();
 }
+
+/* texture memory caches by address: needed whenever bytes under an address already drawn change */
+void gfx_invalidate(void) { tex_dirty = true; }
 
 void tex_free(tex_t *t) {
     if (t->data && !t->borrowed) free(t->data);

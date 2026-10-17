@@ -30,6 +30,7 @@ extern int g_ngames;
 
 void library_scan(void);
 const char *game_synopsis(const game_t *g, int lang);     /* falls back to another language */
+const char *game_genre(const game_t *g, int lang);        /* translated when known */
 void game_asset_path(char *buf, int n, const game_t *g, const char *file);   /* /cubemenu/games/<ID>/file */
 int game_launch_path(char *buf, int n, const game_t *g, int disc);            /* "gcldr:/games/X/game.iso" */
 

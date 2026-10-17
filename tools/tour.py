@@ -110,9 +110,8 @@ def run(sd, script, seconds_cap, ir, games=None, settings=None, stats=None, lang
         if n != last_n: last_n, last_change = n, time.time()
         elif time.time() - last_change > 25 / speed: break          # handed over to Swiss (draws nothing in Dolphin)
         time.sleep(3)
-    p.terminate()
-    try: p.wait(10)
-    except subprocess.TimeoutExpired: p.kill()
+    p.kill()
+    p.wait()
     n = len(glob.glob(os.path.join(UDIR, "Dump", "Frames", "framedump_*.png")))
     print(f"dumped {n} frames (wanted {target}) in {time.time() - t0:.0f}s")
     return n
@@ -158,7 +157,9 @@ def save_shots(script, out_dir):
         near = [k for k in idx if abs(k - frame) <= 6]
         if not near: print("  missing", name, frame); continue
         src = idx[min(near, key=lambda k: abs(k - frame))]
-        clean(Image.open(src).convert("RGB")).save(os.path.join(out_dir, name + ".png"), optimize=True)
+        im = clean(Image.open(src).convert("RGB"))
+        im = im.resize((im.width, im.width * 3 // 4), Image.LANCZOS)     # Dolphin dumps 640x528 for a 4:3 picture
+        im.save(os.path.join(out_dir, name + ".png"), optimize=True)
         print("  ", name)
 
 
@@ -214,7 +215,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if a.shots:
         s = tour_script()
-        run(a.sd, s, 3600, a.ir, stats=a.stats, lang=a.lang)
+        run(a.sd, s, 3600, a.ir, stats=a.stats, lang=a.lang, speed=0.5)
         save_shots(s, os.path.join(ROOT, "docs", "screenshots"))
     if a.video:
         s = video_script()

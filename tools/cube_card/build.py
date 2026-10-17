@@ -36,7 +36,7 @@ def load_tdb(cache_dir):
         rating = game.find("rating")
         db[gid] = dict(title=loc.get("EN") or next(iter(loc.values()), ""), developer=game.findtext("developer") or "",
                        publisher=game.findtext("publisher") or "", year=(date.get("year") if date is not None else "") or "",
-                       genre=(game.findtext("genre") or "").split(",")[0], players=inp.get("players") if inp is not None else "",
+                       genre=(game.findtext("genre") or "").split(",")[-1].strip(), players=inp.get("players") if inp is not None else "",
                        rating=(f"{rating.get('type')} {rating.get('value')}" if rating is not None else ""))
     return db
 
@@ -50,7 +50,7 @@ def write_info(g, src, out, tdb, flags):
     lines = ["# Cube Menu game info (cube-card build)", f"id={g['id']}", f"title={g['name']}"]
     for k in ("developer", "publisher", "year", "players", "rating"):
         if t.get(k): lines.append(f"{k}={_clean(t[k])}")
-    if t.get("genre"): lines.append("genre=" + t["genre"].strip().capitalize())
+    if t.get("genre"): lines.append("genre=" + t["genre"].strip().lower())      # the menu translates / capitalises
     for lang in ("pt", "en", "es"):
         p = os.path.join(src, f"synopsis.{lang}.txt")
         if os.path.exists(p):

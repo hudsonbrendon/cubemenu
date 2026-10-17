@@ -42,6 +42,7 @@ bool tex_load(tex_t *t, const char *path);                            /* .gxt fi
 bool tex_create(tex_t *t, int w, int h, int fmt);                     /* blank, for streaming */
 void tex_free(tex_t *t);
 void tex_update(tex_t *t);                                            /* after writing t->data */
+void gfx_invalidate(void);                                            /* texture bytes changed */
 
 /* 2D (screen pixels) */
 void gfx_2d(void);

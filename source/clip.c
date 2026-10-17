@@ -51,6 +51,7 @@ static void *worker(void *arg) {
         if (wbuf == shown) wbuf = (wbuf + 1) % NBUF;
         if (fread(bufs[wbuf].data, 1, fsize, f) != (size_t)fsize) { fseek(f, 32, SEEK_SET); frame = 0; t0 = gettime(); continue; }
         DCFlushRange(bufs[wbuf].data, fsize);
+        gfx_invalidate();
         if (shown < 0) first_tick = gettime();
         shown = wbuf;
         frame++;

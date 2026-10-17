@@ -129,6 +129,47 @@ const char *game_synopsis(const game_t *g, int lang) {
     return NULL;
 }
 
+static const char *const GENRES[][4] = {   /* GameTDB name, pt, en, es */
+    {"action", "Ação", "Action", "Acción"},
+    {"adventure", "Aventura", "Adventure", "Aventura"},
+    {"racing", "Corrida", "Racing", "Carreras"},
+    {"kart racing", "Corrida de kart", "Kart racing", "Carreras de karts"},
+    {"futuristic racing", "Corrida futurista", "Futuristic racing", "Carreras futuristas"},
+    {"party", "Party game", "Party game", "Juego de fiesta"},
+    {"shooter", "Tiro", "Shooter", "Disparos"},
+    {"first-person shooter", "Tiro em primeira pessoa", "First-person shooter", "Disparos en primera persona"},
+    {"third-person shooter", "Tiro em terceira pessoa", "Third-person shooter", "Disparos en tercera persona"},
+    {"beat 'em up", "Briga de rua", "Beat 'em up", "Beat 'em up"},
+    {"survival horror", "Survival horror", "Survival horror", "Survival horror"},
+    {"strategy", "Estratégia", "Strategy", "Estrategia"},
+    {"turn-based strategy", "Estratégia por turnos", "Turn-based strategy", "Estrategia por turnos"},
+    {"soccer", "Futebol", "Soccer", "Fútbol"},
+    {"2d platformer", "Plataforma 2D", "2D platformer", "Plataformas 2D"},
+    {"3d platformer", "Plataforma 3D", "3D platformer", "Plataformas 3D"},
+    {"platformer", "Plataforma", "Platformer", "Plataformas"},
+    {"role-playing", "RPG", "Role-playing", "Rol"},
+    {"fighting", "Luta", "Fighting", "Lucha"},
+    {"3d fighting", "Luta 3D", "3D fighting", "Lucha 3D"},
+    {"golf", "Golfe", "Golf", "Golf"},
+    {"tennis", "Tênis", "Tennis", "Tenis"},
+    {"baseball", "Beisebol", "Baseball", "Béisbol"},
+    {"sports", "Esportes", "Sports", "Deportes"},
+    {"puzzle", "Quebra-cabeça", "Puzzle", "Puzle"},
+    {"music", "Música", "Music", "Música"},
+    {"rhythm", "Ritmo", "Rhythm", "Ritmo"},
+    {"simulation", "Simulação", "Simulation", "Simulación"},
+};
+
+const char *game_genre(const game_t *g, int lang) {
+    static char buf[40];
+    if (!g->genre[0]) return "";
+    for (unsigned i = 0; i < sizeof GENRES / sizeof *GENRES; i++)
+        if (!strcasecmp(g->genre, GENRES[i][0])) return GENRES[i][1 + (lang >= 0 && lang < 3 ? lang : 1)];
+    snprintf(buf, sizeof buf, "%s", g->genre);
+    buf[0] = toupper((unsigned char)buf[0]);
+    return buf;
+}
+
 void game_asset_path(char *buf, int n, const game_t *g, const char *file) {
     snprintf(buf, n, "/cubemenu/games/%s/%s", g->id, file);
 }

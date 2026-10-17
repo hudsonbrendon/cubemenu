@@ -1,0 +1,9 @@
+.dolphin/
+build/
+logs/
+dist/
+apploader/*.elf
+apploader/*.map
+__pycache__/
+*.pyc
+.DS_Store

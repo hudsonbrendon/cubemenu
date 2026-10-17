@@ -103,7 +103,7 @@ IPL replacement's first program) and keep Swiss at `/swiss/boot.dol`.
 | System | **A** open Swiss (no game) · **Y** memory cards · **B** back |
 | Memory cards | **L / R** slot A / B · ▲ ▼ · **B** back |
 
-Hold nothing at boot: the menu comes up in about three seconds. **Settings → Open Swiss** (or **A** on the
+Hold **B** while turning the console on to skip the menu and go straight to Swiss. **Settings → Open Swiss** (or **A** on the
 System screen) starts Swiss on its own, for everything Cube Menu does not do (game settings, cheats,
 file management, other devices).
 

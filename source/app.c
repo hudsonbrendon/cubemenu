@@ -946,23 +946,23 @@ static void draw_launch(float dt) {
     float led = clampf((t - LAUNCH_T_LED) / 0.15f, 0, 1);
     float zoom = 0.9f + 0.1f * ease_out(fade_in);
 
-    gfx_3d(32, (vec3){0, 290, 430}, (vec3){0, 52, 0});
+    gfx_3d(32, (vec3){0, 300, 640}, (vec3){0, 34, 0});
     gfx_push();
     gfx_scale(zoom, zoom, zoom);
     gfx_rotate('y', yaw);
-    console3d(col_scale(th->console, 1.3f), assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, fade_in);
+    console3d(col_scale(th->console, 1.45f), assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, fade_in);
     gfx_pop();
     gfx_2d();
 
     float ca = clampf((t - 0.3f) / 0.4f, 0, 1);
-    draw_text_center(&g_font_l, SCREEN_W / 2 + 1, 362, col_alpha(0x00000080, ca), g->name);
-    draw_text_center(&g_font_l, SCREEN_W / 2, 360, col_alpha(th->text_hi, ca), g->name);
+    draw_text_center(&g_font_l, SCREEN_W / 2 + 1, 384, col_alpha(0x00000080, ca), g->name);
+    draw_text_center(&g_font_l, SCREEN_W / 2, 382, col_alpha(th->text_hi, ca), g->name);
     char s[48];
     int dots = ((int)(t * 3)) % 4;
     snprintf(s, sizeof s, "%s%.*s", tr(S_LAUNCHING), dots, "...");
     if (g->ndisc > 1) snprintf(s + strlen(s), sizeof s - strlen(s), "   %s %d", tr(S_DISC), launch_disc + 1);
-    draw_text(&g_font_s, SCREEN_W / 2 - text_width(&g_font_s, tr(S_LAUNCHING)) / 2, 400, col_alpha(th->text_dim, ca), s);
-    float bw = 280, bx = (SCREEN_W - bw) / 2, by = 428, pr = clampf(t / (LAUNCH_T_END - 0.2f), 0, 1);
+    draw_text(&g_font_s, SCREEN_W / 2 - text_width(&g_font_s, tr(S_LAUNCHING)) / 2, 420, col_alpha(th->text_dim, ca), s);
+    float bw = 280, bx = (SCREEN_W - bw) / 2, by = 446, pr = clampf(t / (LAUNCH_T_END - 0.2f), 0, 1);
     draw_round_rect(bx, by, bw, 6, 3, col_alpha(0xFFFFFFFF, 0.15f * ca));
     draw_round_rect(bx, by, fmaxf(6, bw * pr), 6, 3, col_alpha(th->accent, ca));
     /* end: white flash into black, like the console handing over to the disc */
@@ -990,6 +990,14 @@ static void draw_saver(void) {
 
 void app_init(void) {
     card_ok = fs_init();
+    /* escape hatch: B held at power on goes straight to Swiss */
+    VIDEO_WaitVSync();
+    PAD_ScanPads();
+    if (card_ok && (PAD_ButtonsHeld(0) & PAD_BUTTON_B)) {
+        const char *swiss = boot_find_swiss();
+        char err[96];
+        if (swiss) boot_dol(swiss, 0, NULL, before_jump, err, sizeof err);
+    }
     settings_load();
     theme_set(g_set.theme);
     lang_set(g_set.lang);

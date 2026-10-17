@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 - 2026-10-17
+
+- boot.iso: fix the console freezing on the GameCube logo. The apploader wrote stale data-cache lines
+  back over the menu the drive had just loaded (Dolphin does not emulate that cache, so it only showed
+  on hardware); destinations are now invalidated, and all its state lives inside the loaded image.
+
 ## 0.1.0 - 2026-10-17
 
 First release.

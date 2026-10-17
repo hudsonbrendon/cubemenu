@@ -4,15 +4,19 @@
 typedef unsigned int u32;
 typedef void (*report_t)(const char *, ...);
 
-static u32 hdr[8] __attribute__((aligned(32)));
-static u32 dol[64] __attribute__((aligned(32)));
-static int state, sec;
+/* everything lives in .data so it is part of the image the IPL copies (nothing past it is ours) */
+static u32 hdr[8] __attribute__((aligned(32), section(".data"))) = {1};
+static u32 dol[64] __attribute__((aligned(32), section(".data"))) = {1};
+static int state __attribute__((section(".data"))) = -1, sec __attribute__((section(".data"))) = -1;
 
 static void dc_invalidate(void *p, u32 n) {
     for (u32 a = (u32)p & ~31u; a < (u32)p + n; a += 32) __asm__ volatile("dcbi 0,%0" ::"r"(a));
 }
+/* The drive writes memory by DMA, behind the data cache. Destinations are invalidated (never written
+ * back: a dirty line left by the IPL would overwrite what the drive just put there) and, at the end,
+ * dropped from the instruction cache. */
 static void ic_invalidate(u32 p, u32 n) {
-    for (u32 a = p & ~31u; a < p + n; a += 32) __asm__ volatile("dcbst 0,%0; sync; icbi 0,%0" ::"r"(a));
+    for (u32 a = p & ~31u; a < p + n; a += 32) __asm__ volatile("icbi 0,%0" ::"r"(a));
     __asm__ volatile("sync; isync");
 }
 
@@ -25,7 +29,7 @@ static int ap_main(void **dst, u32 *size, u32 *off) {
         *dst = hdr; *size = 0x20; *off = 0x420; state = 1;
         return 1;
     case 1:
-        dc_invalidate(hdr, sizeof hdr);
+        dc_invalidate(hdr, sizeof hdr);      /* the drive filled it: read the fresh bytes */
         dc_invalidate(dol, sizeof dol);
         *dst = dol; *size = 0x100; *off = hdr[0]; state = 2;
         return 1;
@@ -36,6 +40,7 @@ static int ap_main(void **dst, u32 *size, u32 *off) {
             if (!dol[36 + i] || !dol[18 + i]) continue;
             *dst = (void *)dol[18 + i];
             *size = (dol[36 + i] + 31) & ~31u;
+            dc_invalidate(*dst, *size);
             *off = hdr[0] + dol[i];
             return 1;
         }
@@ -47,7 +52,7 @@ static int ap_main(void **dst, u32 *size, u32 *off) {
 
 static void *ap_close(void) {
     for (int i = 0; i < 18; i++)
-        if (dol[36 + i]) ic_invalidate(dol[18 + i], dol[36 + i]);
+        if (dol[36 + i]) { dc_invalidate((void *)dol[18 + i], dol[36 + i]); ic_invalidate(dol[18 + i], dol[36 + i]); }
     /* BSS is cleared by the DOL's own startup code */
     return (void *)dol[56];
 }

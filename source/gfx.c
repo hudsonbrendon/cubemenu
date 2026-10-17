@@ -357,10 +357,18 @@ void draw_tex_disc(const tex_t *t, float cx, float cy, float r, float angle, uin
 
 static guVector light = {-0.35f, 0.75f, 0.56f};
 
-void gfx_3d(float fovy, vec3 eye, vec3 at) {
+static vec3 view_dir = {0, 0.5f, 0.87f};   /* towards the eye, world space */
+
+void gfx_3d(float fovy, vec3 eye, vec3 at) { gfx_3d_shift(fovy, eye, at, 0); }
+
+void gfx_3d_shift(float fovy, vec3 eye, vec3 at, float shift_px) {
     Mtx44 p;
     guPerspective(p, fovy, (float)SCREEN_W / SCREEN_H, 10.0f, 5000.0f);
+    /* move the picture up by shift_px without changing the view: offset in NDC after projection */
+    p[1][2] -= 2.0f * shift_px / SCREEN_H;
     GX_LoadProjectionMtx(p, GX_PERSPECTIVE);
+    float vx = eye.x - at.x, vy = eye.y - at.y, vz = eye.z - at.z, vl = sqrtf(vx * vx + vy * vy + vz * vz);
+    if (vl > 0) view_dir = (vec3){vx / vl, vy / vl, vz / vl};
     guVector e = {eye.x, eye.y, eye.z}, a = {at.x, at.y, at.z}, up = {0, 1, 0};
     guLookAt(view, &e, &up, &a);
     guMtxIdentity(model);
@@ -410,6 +418,31 @@ uint32_t shade(uint32_t base, vec3 n) {
     if (len < 1e-5f) return base;
     float d = (wx * light.x + wy * light.y + wz * light.z) / len;
     return col_scale(base, 0.42f + 0.62f * clampf(d, 0, 1));
+}
+
+/* plastic: diffuse key light + ambient + a Blinn highlight towards the eye */
+uint32_t shade_gloss(uint32_t base, vec3 n, float gloss, float power) {
+    float wx = model[0][0] * n.x + model[0][1] * n.y + model[0][2] * n.z;
+    float wy = model[1][0] * n.x + model[1][1] * n.y + model[1][2] * n.z;
+    float wz = model[2][0] * n.x + model[2][1] * n.y + model[2][2] * n.z;
+    float len = sqrtf(wx * wx + wy * wy + wz * wz);
+    if (len < 1e-5f) return base;
+    wx /= len; wy /= len; wz /= len;
+    float d = wx * light.x + wy * light.y + wz * light.z;
+    float k = 0.38f + 0.70f * clampf(d, 0, 1);
+    float hx = light.x + view_dir.x, hy = light.y + view_dir.y, hz = light.z + view_dir.z;
+    float hl = sqrtf(hx * hx + hy * hy + hz * hz);
+    float sp = clampf((wx * hx + wy * hy + wz * hz) / hl, 0, 1);
+    sp = powf(sp, power) * gloss;
+    return col_mix(col_scale(base, k), (base & 0xFF) | 0xFFFFFF00, clampf(sp, 0, 1));
+}
+
+void fan3(vec3 c, const vec3 *ring, int n, uint32_t cc, const uint32_t *cols) {
+    set_textured(NULL);
+    GX_Begin(GX_TRIANGLEFAN, GX_VTXFMT0, n + 1);
+    vtx(c.x, c.y, c.z, cc, 0, 0);
+    for (int i = 0; i < n; i++) vtx(ring[i].x, ring[i].y, ring[i].z, cols[i], 0, 0);
+    GX_End();
 }
 
 void quad3(const tex_t *t, vec3 a, vec3 b, vec3 c, vec3 d, float u0, float v0, float u1, float v1,

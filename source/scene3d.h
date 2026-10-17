@@ -14,6 +14,6 @@ void case3d(const tex_t *cover, const tex_t *disc, float alpha, float disc_out, 
 /* the disc on its own, in the XY plane (label towards +Z) */
 void disc3d(const tex_t *disc, float angle, float alpha);
 
-/* GameCube console for the launch scene. Origin: floor centre; 150 x 110 x 161 mm.
- * lid: 0 closed .. 1 open; disc_y: height of the disc above the tray (<0 hides it); led 0..1 */
-void console3d(uint32_t body, const tex_t *disc, float lid, float disc_y, float disc_angle, float led, float alpha);
+/* The GameCube for the launch scene (console3d.c), always Indigo. Origin: floor centre; 150 x 110 x 161 mm.
+ * lid: 0 closed .. 1 open; disc_y: height of the disc above the spindle (<0 hides it); led 0..1 */
+void console3d(uint32_t unused, const tex_t *disc, float lid, float disc_y, float disc_angle, float led, float alpha);

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.4 - 2026-10-17
+
+- Launch scene: the GameCube rebuilt from photographs of the console. Indigo shell with softened
+  edges and base seam, the disc lid with notches round the corner buttons and the round black badge,
+  POWER / RESET in Indigo and OPEN in light grey, the power light, the light-grey front panel with
+  four round controller ports and their dots and two memory card doors, 8 x 8 vent grilles with
+  their lip on both sides, the black carrying handle, and inside the bay the black turntable, chrome
+  spindle, laser sled and the label under the lid. Plastic is lit with a specular highlight. The
+  camera starts three-quarter, rises over the top while the disc goes in and comes back down to
+  the badge. Always Indigo, whatever the theme.
+- Start-up trace on screen and in `/cubemenu/boot.log` (0.1.3), lighter: one line per step.
+
 ## 0.1.2 - 2026-10-17
 
 - Install through Swiss: GC Loader keeps booting Swiss's own `boot.iso`, and `cube-card install`

@@ -941,22 +941,26 @@ static void draw_launch(float dt) {
     draw_rect_grad(0, 0, SCREEN_W, SCREEN_H, th->bg_top, th->bg_bottom);
     draw_glow(SCREEN_W / 2, 250, 300, col_alpha(th->accent2, 0.35f * fade_in));
 
-    float yaw = -28 + 20 * ease_io(t / LAUNCH_T_END);
     float lid = ease_io((t - LAUNCH_T_LID_OPEN) / 0.6f) * (1 - ease_io((t - LAUNCH_T_LID_CLOSE) / 0.5f));
     float dk = clampf((t - LAUNCH_T_DISC) / 0.9f, 0, 1);
     float disc_y = t < LAUNCH_T_DISC ? -1 : 150 * (1 - ease_out(dk));
     static float spin;
     spin += dt * (t > LAUNCH_T_LED ? 18.0f * clampf((t - LAUNCH_T_LED) / 0.8f, 0.1f, 1) : 1.2f);
     float led = clampf((t - LAUNCH_T_LED) / 0.15f, 0, 1);
-    float zoom = 0.9f + 0.1f * ease_out(fade_in);
 
-    gfx_3d(32, (vec3){0, 300, 640}, (vec3){0, 34, 0});
-    gfx_push();
-    gfx_scale(zoom, zoom, zoom);
-    gfx_rotate('y', yaw);
-    console3d(col_scale(th->console, 1.45f), assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, fade_in);
-    gfx_pop();
+    /* camera: a three-quarter view from the side, up over the top while the disc goes in, then down
+     * again to the emblem on the closed lid */
+    float up = ease_io((t - (LAUNCH_T_LID_OPEN - 0.1f)) / 0.7f) * (1 - ease_io((t - LAUNCH_T_LID_CLOSE) / 0.8f));
+    float yaw = lerpf(40, -34, ease_io(t / LAUNCH_T_END)) * (1 - 0.6f * up);
+    float elev = lerpf(28, 66, up);
+    float dist = lerpf(560, 470, up) - 40 * ease_io((t - LAUNCH_T_LED) / 1.4f) + 60 * (1 - ease_out(fade_in));
+    vec3 at = {0, lerpf(48, 70, up), lerpf(0, -10, up)};
+    float yr = yaw * (float)M_PI / 180, er = elev * (float)M_PI / 180;
+    vec3 eye = {at.x + dist * sinf(yr) * cosf(er), at.y + dist * sinf(er), at.z + dist * cosf(yr) * cosf(er)};
+    gfx_3d_shift(34, eye, at, 46);
+    console3d(0, assets_get(launch_game, AS_DISC), lid, disc_y, spin, led, 1);
     gfx_2d();
+    if (fade_in < 1) draw_rect(0, 0, SCREEN_W, SCREEN_H, col_alpha(th->bg_top, 1 - fade_in));   /* solid model, faded in */
 
     float ca = clampf((t - 0.3f) / 0.4f, 0, 1);
     draw_text_center(&g_font_l, SCREEN_W / 2 + 1, 384, col_alpha(0x00000080, ca), g->name);

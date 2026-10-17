@@ -61,6 +61,7 @@ void draw_tex_disc(const tex_t *t, float cx, float cy, float r, float angle, uin
 
 /* 3D */
 void gfx_3d(float fovy, vec3 eye, vec3 at);
+void gfx_3d_shift(float fovy, vec3 eye, vec3 at, float shift_px);   /* picture moved up by shift_px */
 void gfx_push(void);          /* model matrix stack */
 void gfx_pop(void);
 void gfx_translate(float x, float y, float z);
@@ -74,3 +75,5 @@ void disc3(const tex_t *t, float r, float angle, uint32_t c, int seg);       /* 
 void ring3(float r0, float r1, uint32_t c, int seg);
 /* shade a base colour by a face normal against the fixed key light */
 uint32_t shade(uint32_t base, vec3 n);
+uint32_t shade_gloss(uint32_t base, vec3 n, float gloss, float power);
+void fan3(vec3 c, const vec3 *ring, int n, uint32_t cc, const uint32_t *cols);

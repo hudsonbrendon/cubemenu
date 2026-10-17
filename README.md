@@ -41,7 +41,7 @@ for the Dreamcast.
 
 ## Screenshots
 
-https://github.com/hudsonbrendon/cubemenu/releases/download/v0.1.0/cubemenu-demo.mp4
+https://github.com/hudsonbrendon/cubemenu/releases/download/v0.1.4/cubemenu-demo.mp4
 
 | | |
 |---|---|

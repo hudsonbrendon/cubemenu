@@ -79,6 +79,31 @@ def logo(width, text_color, sub_color=None, emblem_colors=INDIGO):
     return img
 
 
+def lid_badge(size):
+    """The black round badge in the middle of the console's lid: glossy black, silver lettering."""
+    ss = 4
+    S = size * ss
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for i in range(S // 2, 0, -2):           # soft radial sheen, darker at the rim
+        t = i / (S / 2)
+        v = int(20 + 22 * (1 - t) ** 1.6)
+        d.ellipse((S / 2 - i, S / 2 - i, S / 2 + i, S / 2 + i), fill=(v, v, v + 2, 255))
+    d.ellipse((ss * 3, ss * 3, S - ss * 3, S - ss * 3), outline=(46, 46, 50, 255), width=ss * 2)
+    small = ImageFont.truetype(JOST, int(S * 0.055)); small.set_variation_by_name("Medium")
+    big = ImageFont.truetype(JOST, int(S * 0.125)); big.set_variation_by_name("Bold")
+    silver = (196, 198, 204, 255)
+    def spaced(text, font, cy, track):
+        w = sum(font.getlength(c) for c in text) + track * (len(text) - 1)
+        x = (S - w) / 2
+        for c in text:
+            d.text((x, cy), c, font=font, fill=silver, anchor="lm")
+            x += font.getlength(c) + track
+    spaced("NINTENDO", small, S * 0.43, S * 0.02)
+    spaced("GAMECUBE", big, S * 0.53, S * 0.004)
+    return img.resize((size, size), Image.LANCZOS)
+
+
 def pad_to(img, w, h):
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     img = img.copy()
@@ -105,6 +130,7 @@ if __name__ == "__main__":
         open(os.path.join(ddir, name), "wb").write(gx.header(img.width, img.height, gx.RGB5A3, img.width * img.height * 2) + gx.rgb5a3(img))
     save_tex(pad_to(logo(320, (255, 255, 255, 255)), 320, 288), "logo.bin")
     save_tex(emblem(128), "emblem.bin")
+    save_tex(lid_badge(256), "lid_badge.bin")
     wm = wordmark("CUBE MENU", 40, (255, 255, 255, 255), 0.05)
     save_tex(pad_to(wm, 256, 40), "wordmark.bin")
     print("brand OK")

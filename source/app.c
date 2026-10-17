@@ -8,6 +8,7 @@
 #include "gfx.h"
 #include "input.h"
 #include "lang.h"
+#include "memcard.h"
 #include "library.h"
 #include "scene3d.h"
 #include "settings.h"
@@ -20,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 
 #ifndef CUBEMENU_VERSION
 #define CUBEMENU_VERSION "dev"
@@ -30,7 +32,9 @@ enum { I_H_VISUAL, I_THEME, I_LANG, I_VIEW, I_BGVIDEO, I_SHOWDISC, I_LAUNCHANIM,
        I_H_LIBRARY, I_SORT,
        I_H_SYSTEM, I_CLOCK24, I_CLOCKADJ, I_SAVER, I_OPENSWISS, I_RESET, I_COUNT };
 
-static int screen = SCR_INTRO, prev_screen = SCR_LIBRARY;
+static int screen = SCR_INTRO;
+static const char *pending_toast;
+static void mc_load(int slot);
 static float screen_t;
 static int view[MAX_GAMES], nview;
 static int filter = FILTER_ALL;
@@ -163,7 +167,7 @@ static void meta_line(char *buf, int n, const game_t *g) {
     if (g->year) k += snprintf(buf + k, n - k, "%d", g->year);
     if (g->publisher[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", g->publisher);
     if (g->genre[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", g->genre);
-    if (g->players[0] && strcmp(g->players, "0")) k += snprintf(buf + k, n - k, "%s%s %s", k ? "  ·  " : "", g->players, g->players[0] == '1' && !g->players[1] ? "P" : "P");
+    if (g->players[0] && strcmp(g->players, "0")) k += snprintf(buf + k, n - k, "%s%sP", k ? "  ·  " : "", g->players);
     if (g->playtime) { fmt_playtime(pt, sizeof pt, g->playtime); k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", pt); }
 }
 
@@ -778,6 +782,7 @@ static void draw_settings(void) {
 
 static void update_system(uint32_t p) {
     if (p & BTN_A) { audio_sfx(SFX_SELECT); open_swiss(); }
+    if (p & BTN_Y) { audio_sfx(SFX_OPEN); screen = SCR_MEMCARD; screen_t = 0; mc_load(0); }
     if (p & (BTN_B | BTN_START)) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
 }
 
@@ -824,9 +829,93 @@ static void draw_system(void) {
     }
     if (!shown) draw_text_wrap(&g_font_s, rx, ry + 44, 250, 20, 0, 6, th->text_dim, tr(S_NEVER_PLAYED));
     draw_text_center(&g_font_s, SCREEN_W / 2, 398, th->text_dim, tr(S_ABOUT_LINE));
-    static const int gl[] = {G_A, G_B};
-    const char *lb[] = {tr(S_OPEN_SWISS), tr(S_BACK)};
-    ui_hints(gl, lb, 2);
+    static const int gl[] = {G_A, G_Y, G_B};
+    const char *lb[] = {tr(S_OPEN_SWISS), tr(S_MEMCARDS), tr(S_BACK)};
+    ui_hints(gl, lb, 3);
+}
+
+/* ---------------- memory cards ---------------- */
+
+#define MAX_SAVES 128
+static save_t saves[MAX_SAVES];
+static int nsaves, mc_slot, mc_free, mc_cur;
+static float mc_scroll;
+
+static void mc_load(int slot) {
+    if (nsaves > 0) memcard_free(saves, nsaves);
+    gfx_begin(th->bg_top);
+    ui_background(0);
+    ui_topbar(tr(S_MEMCARDS), NULL);
+    draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, tr(S_READING));
+    gfx_end();
+    mc_slot = slot;
+    nsaves = memcard_scan(slot, saves, MAX_SAVES, &mc_free);
+    mc_cur = 0;
+    mc_scroll = 0;
+}
+
+static void update_memcard(uint32_t p) {
+    if (p & (BTN_L | BTN_R | BTN_LEFT | BTN_RIGHT)) { audio_sfx(SFX_OPEN); mc_load(!mc_slot); }
+    if (p & BTN_UP && mc_cur > 0) { mc_cur--; audio_sfx(SFX_MOVE); }
+    if (p & BTN_DOWN && mc_cur < nsaves - 1) { mc_cur++; audio_sfx(SFX_MOVE); }
+    if (p & BTN_B) { if (nsaves > 0) memcard_free(saves, nsaves); nsaves = 0; screen = SCR_SYSTEM; audio_sfx(SFX_BACK); }
+}
+
+static void draw_memcard(void) {
+    ui_background(0);
+    ui_topbar(tr(S_MEMCARDS), NULL);
+    /* slot tabs */
+    for (int s = 0; s < 2; s++) {
+        float x = 54 + s * 130;
+        bool on = s == mc_slot;
+        draw_text(&g_font_m, x, 74, on ? th->text_hi : th->text_dim, tr(s ? S_SLOT_B : S_SLOT_A));
+        if (on) draw_round_rect(x, 104, text_width(&g_font_m, tr(s ? S_SLOT_B : S_SLOT_A)), 3, 1, th->accent);
+    }
+    char buf[64];
+    if (nsaves < 0) {
+        draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, tr(S_NO_MEMCARD));
+    } else {
+        int k = snprintf(buf, sizeof buf, tr(S_N_SAVES), nsaves);
+        snprintf(buf + k, sizeof buf - k, "   ·   ");
+        k = strlen(buf);
+        snprintf(buf + k, sizeof buf - k, tr(S_FREE_BLOCKS), mc_free);
+        draw_text_right(&g_font_s, SCREEN_W - 54, 82, th->text_dim, buf);
+        const float x = 40, y0 = 122, rh = 44, vis = 6;
+        float target = mc_cur - 2;
+        if (target > nsaves - vis) target = nsaves - vis;
+        if (target < 0) target = 0;
+        mc_scroll += (target - mc_scroll) * 0.25f;
+        ui_panel(x - 10, y0 - 8, SCREEN_W - 2 * x + 20, vis * rh + 12, 1.1f);
+        for (int i = (int)mc_scroll; i < nsaves && i < mc_scroll + vis + 1; i++) {
+            float y = y0 + (i - mc_scroll) * rh;
+            if (y < y0 - 4 || y > y0 + (vis - 1) * rh + 4) continue;
+            save_t *sv = &saves[i];
+            bool sel = i == mc_cur;
+            if (sel) draw_round_rect(x - 4, y - 2, SCREEN_W - 2 * x + 8, rh - 4, 8, col_alpha(th->accent, 0.9f));
+            if (sv->icon.data) draw_tex(&sv->icon, x + 4, y + 3, 32, 32, 0xFFFFFFFF);
+            else draw_tex(&g_tex_emblem, x + 6, y + 5, 28, 28, 0xFFFFFF70);
+            uint32_t tc = sel ? 0x14102EFF : th->text_hi, dc = sel ? 0x2A2350FF : th->text_dim;
+            draw_text_fit(&g_font_s, x + 46, y + 1, 330, tc, sv->title);
+            draw_text_fit(&g_font_s, x + 46, y + 19, 330, dc, sv->sub[0] ? sv->sub : sv->file);
+            /* the game's cover when it is in the library */
+            for (int g = 0; g < g_ngames; g++) {
+                if (strncmp(g_games[g].id, sv->gamecode, 4)) continue;
+                const tex_t *c = assets_get(g, AS_CASE);
+                if (c) draw_tex_uv(c, SCREEN_W - x - 150, y + 2, 25, 35, 0.5254f, 0, 1, 1, 0xFFFFFFFF);
+                break;
+            }
+            time_t t = (time_t)sv->time + 946684800;
+            struct tm *tm = gmtime(&t);
+            snprintf(buf, sizeof buf, "%04d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+            draw_text_right(&g_font_s, SCREEN_W - x - 6, y + 1, dc, buf);
+            snprintf(buf, sizeof buf, tr(S_BLOCKS), (int)sv->blocks);
+            draw_text_right(&g_font_s, SCREEN_W - x - 6, y + 19, dc, buf);
+        }
+        ui_scrollbar(SCREEN_W - x + 14, y0, vis * rh - 8, nsaves > vis ? mc_scroll / (nsaves - vis) : 0, vis / (float)(nsaves ? nsaves : 1));
+    }
+    static const int gl[] = {G_LR, G_DPAD, G_B};
+    const char *lb[] = {tr(S_SLOT), tr(S_SCROLL), tr(S_BACK)};
+    ui_hints(gl, lb, 3);
 }
 
 /* ---------------- launch scene ---------------- */
@@ -907,8 +996,7 @@ void app_init(void) {
     audio_volume(g_set.volume);
     rebuild_view(g_set.last_game[0] ? g_set.last_game : NULL);
     demo_load();
-    const char *credit = stats_credit_message();
-    if (credit) ui_toast(credit);
+    pending_toast = stats_credit_message();       /* "+1h 20m  Pikmin": shown once the intro is over */
 }
 
 void app_frame(float dt) {
@@ -937,18 +1025,21 @@ void app_frame(float dt) {
 
     switch (screen) {
     case SCR_INTRO:
-        if ((p & (BTN_A | BTN_START | BTN_B)) || screen_t > 3.2f) { screen = SCR_LIBRARY; screen_t = 0; sel_t = 0; media_started = false; }
+        if ((p & (BTN_A | BTN_START | BTN_B)) || screen_t > 3.2f) {
+            screen = SCR_LIBRARY; screen_t = 0; sel_t = 0; media_started = false;
+            if (pending_toast) { ui_toast(pending_toast); pending_toast = NULL; }
+        }
         break;
     case SCR_LIBRARY: if (!saver) update_library(p, dt); break;
     case SCR_DETAILS: update_details(p); break;
     case SCR_SETTINGS: update_settings(p); break;
     case SCR_SYSTEM: update_system(p); break;
+    case SCR_MEMCARD: update_memcard(p); break;
     case SCR_LAUNCH:
         launch_t += dt;
         if (launch_t >= LAUNCH_T_END + 0.2f) do_boot();
         break;
     }
-    (void)prev_screen;
 
     gfx_begin(th->bg_top);
     switch (screen) {
@@ -957,6 +1048,7 @@ void app_frame(float dt) {
     case SCR_DETAILS: draw_details(); break;
     case SCR_SETTINGS: draw_settings(); break;
     case SCR_SYSTEM: draw_system(); break;
+    case SCR_MEMCARD: draw_memcard(); break;
     case SCR_LAUNCH: draw_launch(dt); break;
     }
     if (saver) draw_saver();

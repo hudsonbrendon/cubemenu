@@ -15,5 +15,6 @@ First release.
   buttons in the controller colours.
 - Favourites, recently played, sort orders, jump by letter, multi-disc picker, play time across reboots,
   System screen, screensaver, clock adjustment, settings saved to the card.
+- Memory cards screen (slot A / B): saves with icon, comment, blocks and date.
 - `boot.iso` for GC Loader with its own apploader; `cubemenu.dol` for other loaders.
 - `cube-card` tool: scan, fetch (GameTDB, libretro thumbnails, Wikipedia, yt-dlp), build, install.

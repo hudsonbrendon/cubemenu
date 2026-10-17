@@ -102,7 +102,9 @@ static void *worker(void *arg) {
 }
 
 void assets_init(void) {
-    LWP_MutexInit(&lock, false);
+    static bool have_lock;
+    if (running) return;
+    if (!have_lock) { LWP_MutexInit(&lock, false); have_lock = true; }
     running = true;
     LWP_CreateThread(&thread, worker, NULL, stack, sizeof stack, 40);
 }

@@ -99,6 +99,9 @@ static void scan_menu_music(void) {
 }
 
 void audio_init(void) {
+    static bool done;
+    if (done) { AESND_Pause(false); return; }      /* back from a failed launch */
+    done = true;
     AESND_Init();
     MP3Player_Init();
     voice = AESND_AllocateVoice(NULL);

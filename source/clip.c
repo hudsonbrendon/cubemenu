@@ -60,8 +60,13 @@ static void *worker(void *arg) {
 }
 
 void clip_init(void) {
-    bw = 320; bh = 176; fsize = bw * bh / 2;
-    for (int i = 0; i < NBUF; i++) tex_create(&bufs[i], bw, bh, GX_TF_CMPR);
+    if (running) return;
+    if (!bufs[0].data) {
+        bw = 320; bh = 176; fsize = bw * bh / 2;
+        for (int i = 0; i < NBUF; i++) tex_create(&bufs[i], bw, bh, GX_TF_CMPR);
+    }
+    want[0] = 0;
+    shown = -1;
     running = true;
     LWP_CreateThread(&thread, worker, NULL, stack, sizeof stack, 50);
 }

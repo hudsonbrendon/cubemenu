@@ -90,6 +90,15 @@ enum {
     S_NO_RECENT_HINT,
     S_FAV_ADDED,
     S_FAV_REMOVED,
+    S_MEMCARDS,
+    S_SLOT_A,
+    S_SLOT_B,
+    S_NO_MEMCARD,
+    S_N_SAVES,
+    S_FREE_BLOCKS,
+    S_BLOCKS,
+    S_READING,
+    S_SLOT,
     S_COUNT
 };
 #define LANG_COUNT 3

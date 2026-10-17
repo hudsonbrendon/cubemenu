@@ -14,6 +14,7 @@
 #include "settings.h"
 #include "theme.h"
 #include "ui.h"
+#include "trace.h"
 #include <ctype.h>
 #include <malloc.h>
 #include <math.h>
@@ -992,7 +993,7 @@ static void draw_saver(void) {
 /* ---------------- frame ---------------- */
 
 void app_init(void) {
-    card_ok = fs_init();
+    card_ok = fs_root()[0] != 0;      /* mounted in main() */
     /* escape hatch: B held at power on goes straight to Swiss */
     VIDEO_WaitVSync();
     PAD_ScanPads();
@@ -1001,16 +1002,23 @@ void app_init(void) {
         char err[96];
         if (swiss) boot_dol(swiss, 1, NO_AUTOLOAD, before_jump, err, sizeof err);
     }
+    trace("settings...");
     settings_load();
     theme_set(g_set.theme);
     lang_set(g_set.lang);
-    if (card_ok) { library_scan(); stats_load(); }
+    trace("library...");
+    if (card_ok) { library_scan(); trace("library: %d games", g_ngames); stats_load(); }
+    trace("texture loader...");
     assets_init();
+    trace("clip player...");
     clip_init();
+    trace("audio...");
     audio_init();
     audio_volume(g_set.volume);
+    trace("audio: ok");
     rebuild_view(g_set.last_game[0] ? g_set.last_game : NULL);
     demo_load();
+    trace_done();
     pending_toast = stats_credit_message();       /* "+1h 20m  Pikmin": shown once the intro is over */
 }
 

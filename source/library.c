@@ -1,6 +1,7 @@
 #include "library.h"
 #include "fs.h"
 #include "ini.h"
+#include "trace.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -83,6 +84,7 @@ void library_scan(void) {
         if (e->d_name[0] == '.') continue;
         char folder[160];
         snprintf(folder, sizeof folder, "/games/%s", e->d_name);
+        trace("library: %s", e->d_name);
         DIR *sd = opendir(fs_path(path, sizeof path, folder));
         if (!sd) continue;
         game_t *g = &g_games[g_ngames];

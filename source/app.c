@@ -172,7 +172,45 @@ static void meta_line(char *buf, int n, const game_t *g) {
     if (g->publisher[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", g->publisher);
     if (g->genre[0]) k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", game_genre(g, g_set.lang));
     if (g->players[0] && strcmp(g->players, "0")) k += snprintf(buf + k, n - k, "%s%sP", k ? "  ·  " : "", g->players);
-    if (g->playtime) { fmt_playtime(pt, sizeof pt, g->playtime); k += snprintf(buf + k, n - k, "%s%s", k ? "  ·  " : "", pt); }
+    (void)pt;
+}
+
+/* "há 3 dias": the console's clock may be years off, but two readings of it still subtract fine */
+static void fmt_ago(char *buf, int n, uint32_t when) {
+    long d = (long)time(NULL) - (long)when;
+    if (d < 3600) snprintf(buf, n, "%s", tr(S_AGO_NOW));
+    else if (d < 86400) snprintf(buf, n, tr(S_AGO_HOURS), (int)(d / 3600));
+    else if (d < 2 * 86400) snprintf(buf, n, "%s", tr(S_AGO_YESTERDAY));
+    else if (d < 14 * 86400) snprintf(buf, n, tr(S_AGO_DAYS), (int)(d / 86400));
+    else if (d < 60 * 86400) snprintf(buf, n, tr(S_AGO_WEEKS), (int)(d / (7 * 86400)));
+    else snprintf(buf, n, tr(S_AGO_MONTHS), (int)(d / (30 * 86400)));
+}
+
+/* a small clock: the play-time mark */
+static void clock_icon(float cx, float cy, float r, uint32_t c) {
+    draw_ring(cx, cy, r - 1.6f, r, c);
+    float hand[8] = {cx - 0.8f, cy - r * 0.62f, cx + 0.8f, cy - r * 0.62f, cx + 0.8f, cy + 0.6f, cx - 0.8f, cy + 0.6f};
+    float hand2[8] = {cx - 0.6f, cy - 0.8f, cx + r * 0.5f, cy - 0.8f, cx + r * 0.5f, cy + 0.8f, cx - 0.6f, cy + 0.8f};
+    uint32_t cs[4] = {c, c, c, c};
+    draw_quad_flat(hand, cs);
+    draw_quad_flat(hand2, cs);
+}
+
+/* "Tempo de jogo 2h 30m  ·  Última vez há 3 dias", or "Nunca jogado"; x is the left edge, or the
+ * centre when centred */
+static void playtime_line(const game_t *g, float x, float y, bool centred, float maxw, float a) {
+    char buf[96], pt[24], ago[32];
+    if (g->playtime || g->last_played) {
+        fmt_playtime(pt, sizeof pt, g->playtime);
+        fmt_ago(ago, sizeof ago, g->last_played);
+        snprintf(buf, sizeof buf, "%s %s  ·  %s %s", tr(S_PLAYTIME), pt, tr(S_LAST_PLAYED), ago);
+        if (text_width(&g_font_s, buf) > maxw - 22) snprintf(buf, sizeof buf, "%s  ·  %s", pt, ago);
+    } else snprintf(buf, sizeof buf, "%s", tr(S_NEVER_PLAYED));
+    float w = text_width(&g_font_s, buf) + 22;
+    float x0 = centred ? x - w / 2 : x;
+    uint32_t c = col_alpha(g->playtime ? th->accent : th->text_dim, a);
+    clock_icon(x0 + 8, y + g_font_s.ascent * 0.55f + 1, 7.5f, c);
+    draw_text_fit(&g_font_s, x0 + 22, y, maxw - 22, c, buf);
 }
 
 /* ---------------- launch ---------------- */
@@ -403,13 +441,14 @@ static void draw_list(void) {
 static void draw_title_block(void) {
     game_t *g = cur_game();
     if (!g) return;
-    float y = g_set.view == VIEW_LIST ? 372 : 362;
+    float y = g_set.view == VIEW_LIST ? 356 : 348;
     float a = clampf(sel_t / 0.15f, 0.4f, 1);
     if (g_set.view == VIEW_LIST) {
         draw_text_fit(&g_font_m, 360, y, 250, col_alpha(th->text_hi, a), g->name);
         char meta[160];
         meta_line(meta, sizeof meta, g);
         draw_text_fit(&g_font_s, 360, y + 30, 250, col_alpha(th->text_dim, a), meta);
+        playtime_line(g, 360, y + 52, false, 250, a);
         return;
     }
     char name[80];
@@ -424,7 +463,8 @@ static void draw_title_block(void) {
     }
     char meta[160];
     meta_line(meta, sizeof meta, g);
-    draw_text_center(&g_font_s, SCREEN_W / 2, y + 38, col_alpha(th->text_dim, a), meta);
+    draw_text_center(&g_font_s, SCREEN_W / 2, y + 36, col_alpha(th->text_dim, a), meta);
+    playtime_line(g, SCREEN_W / 2, y + 58, true, 560, a);
 }
 
 static void draw_sidebar(void) {
@@ -615,13 +655,30 @@ static void draw_details(void) {
     draw_text(&g_font_s, lx, sy, th->text_dim, tr(S_SCREENSHOTS));
     const tex_t *shots[2] = {snap, title};
     for (int i = 0; i < 2; i++) {
-        float x = lx + i * 140, y = sy + 24, w = 132, h = 99;
+        float x = lx + i * 140, y = sy + 22, w = 132, h = 74;   /* 4:3 shots shown cropped to fit the stats below */
         bool sel = details_shot == i;
         draw_round_rect(x - 3, y - 3, w + 6, h + 6, 6, sel ? col_alpha(th->accent, in) : col_alpha(0x000000FF, 0.5f * in));
-        if (shots[i]) draw_tex(shots[i], x, y, w, h, col_alpha(0xFFFFFFFF, in));
+        if (shots[i]) draw_tex_uv(shots[i], x, y, w, h, 0, 0.11f, 1, 0.89f, col_alpha(0xFFFFFFFF, in));
         else {
             draw_rect_grad(x, y, w, h, 0x2B2B33FF, 0x111116FF);
             draw_tex(&g_tex_emblem, x + w / 2 - 22, y + h / 2 - 22, 44, 44, 0xFFFFFF60);
+        }
+    }
+    /* play stats: time, last played, sessions; one row each, label left, value right */
+    {
+        float py = sy + 22 + 74 + 9, pw = 272, rh = 19;
+        ui_panel(lx - 4, py, pw + 8, rh * 3 + 9, 1.2f * in);
+        char v[3][32];
+        if (g->playtime || g->last_played) { fmt_playtime(v[0], 32, g->playtime); fmt_ago(v[1], 32, g->last_played); }
+        else { snprintf(v[0], 32, "%s", tr(S_NEVER_PLAYED)); snprintf(v[1], 32, "-"); }
+        snprintf(v[2], 32, "%u", (unsigned)g->launches);
+        const int lab[3] = {S_PLAYTIME, S_LAST_PLAYED, S_LAUNCHES};
+        for (int i = 0; i < 3; i++) {
+            float ry = py + 4 + i * rh;
+            uint32_t vc = i == 0 && g->playtime ? th->accent : th->text_hi;
+            if (i == 0) clock_icon(lx + 8, ry + g_font_s.ascent * 0.55f + 1, 7, col_alpha(vc, in));
+            draw_text(&g_font_s, lx + 22, ry, col_alpha(th->text_dim, in), tr(lab[i]));
+            draw_text_right(&g_font_s, lx + pw - 6, ry, col_alpha(vc, in), v[i]);
         }
     }
     /* the mini disc, spinning next to the shots */
@@ -640,9 +697,7 @@ static void draw_details(void) {
     kv(rx, y, tr(S_YEAR), g->year ? buf : NULL); y += 21;
     kv(rx, y, tr(S_GENRE), game_genre(g, g_set.lang)); y += 21;
     kv(rx, y, tr(S_PLAYERS), g->players); y += 21;
-    if (g->playtime) { fmt_playtime(pt, sizeof pt, g->playtime); kv(rx, y, tr(S_PLAYTIME), pt); }
-    else kv(rx, y, tr(S_PLAYTIME), tr(S_NEVER_PLAYED));
-    y += 21;
+    (void)pt;
     if (g->ndisc > 1) { snprintf(buf, sizeof buf, tr(S_DISCS), g->ndisc); kv(rx, y, tr(S_DISC), buf); y += 21; }
     y += 8;
     float sh = 418 - y;

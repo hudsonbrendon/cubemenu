@@ -103,6 +103,12 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "%d blocos",
         "Lendo o cartão...",
         "Slot",
+        "há pouco",
+        "há %d h",
+        "ontem",
+        "há %d dias",
+        "há %d semanas",
+        "há %d meses",
     },
     {
         "Play",
@@ -204,6 +210,12 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "%d blocks",
         "Reading the card...",
         "Slot",
+        "just now",
+        "%d h ago",
+        "yesterday",
+        "%d days ago",
+        "%d weeks ago",
+        "%d months ago",
     },
     {
         "Jugar",
@@ -305,6 +317,12 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "%d bloques",
         "Leyendo la tarjeta...",
         "Ranura",
+        "hace poco",
+        "hace %d h",
+        "ayer",
+        "hace %d días",
+        "hace %d semanas",
+        "hace %d meses",
     },
 };
 

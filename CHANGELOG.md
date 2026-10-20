@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5 - 2026-10-20
+
+- Play time where the game is: under the title on the shelf, grid and list ("Play time 2h 30m ·
+  Last played 3 days ago", or "Never played"), with a clock mark in the theme colour; on the details
+  screen a panel with play time, last played and sessions.
+- Last played is shown relative to now, so a console clock set to the wrong year does not matter.
+- `build.sh` picks a Python that has Pillow and numpy, or builds with the committed `data/`.
+
 ## 0.1.4 - 2026-10-17
 
 - Launch scene: the GameCube rebuilt from photographs of the console. Indigo shell with softened

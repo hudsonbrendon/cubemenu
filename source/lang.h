@@ -99,6 +99,12 @@ enum {
     S_BLOCKS,
     S_READING,
     S_SLOT,
+    S_AGO_NOW,
+    S_AGO_HOURS,
+    S_AGO_YESTERDAY,
+    S_AGO_DAYS,
+    S_AGO_WEEKS,
+    S_AGO_MONTHS,
     S_COUNT
 };
 #define LANG_COUNT 3

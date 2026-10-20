@@ -16,3 +16,8 @@ typedef struct {
 /* fills out[], returns the count, -1 when no card is in the slot, -2 when it cannot be mounted */
 int memcard_scan(int slot, save_t *out, int max, int *free_blocks);
 void memcard_free(save_t *s, int n);
+
+/* GCMCE / MemCard PRO GC in the slot */
+bool memcard_is_mce(int slot);
+/* switches it to the virtual card of game id6 (e.g. GALE01); the card goes away for about a second */
+bool memcard_mce_set_game(int slot, const char *id6);

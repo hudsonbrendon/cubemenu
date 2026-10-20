@@ -93,3 +93,34 @@ int memcard_scan(int slot, save_t *out, int max, int *free_blocks) {
     CARD_Unmount(slot);
     return n;
 }
+
+/* GCMCE / MemCard PRO GC: commands 0x8B xx on the card's own EXI line (protocol in the FlipperMCE
+ * firmware, doc/mcp/memcardpro.txt). A plain memory card ignores them. */
+static bool mce_xfer(int slot, uint8_t *out, int nout, uint8_t *in, int nin) {
+    if (!inited) { CARD_Init("CMNU", "HB"); inited = true; }
+    bool attached = EXI_Attach(slot, NULL) > 0;
+    bool ok = false;
+    if (EXI_Lock(slot, EXI_DEVICE_0, NULL) > 0) {
+        if (EXI_Select(slot, EXI_DEVICE_0, EXI_SPEED16MHZ) > 0) {
+            ok = EXI_ImmEx(slot, out, nout, EXI_WRITE) > 0;
+            if (ok && nin) ok = EXI_ImmEx(slot, in, nin, EXI_READ) > 0;
+            EXI_Deselect(slot);
+        }
+        EXI_Unlock(slot);
+    }
+    if (attached) EXI_Detach(slot);
+    return ok;
+}
+
+bool memcard_is_mce(int slot) {
+    uint8_t cmd[2] = {0x8B, 0x00}, r[4] = {0};
+    return mce_xfer(slot, cmd, 2, r, 4) && r[0] == 0x38 && r[1] == 0x42;
+}
+
+/* "Set disc ID": GALE01 + disc and version as two ASCII digits each; the card opens that game's virtual card */
+bool memcard_mce_set_game(int slot, const char *id6) {
+    uint8_t cmd[12] = {0x8B, 0x11};
+    memcpy(cmd + 2, id6, 6);
+    memcpy(cmd + 8, "0000", 4);
+    return mce_xfer(slot, cmd, sizeof cmd, NULL, 0);
+}

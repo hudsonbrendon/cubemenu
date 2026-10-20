@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <malloc.h>
 #include <math.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,8 @@ enum { I_H_VISUAL, I_THEME, I_LANG, I_VIEW, I_BGVIDEO, I_SHOWDISC, I_LAUNCHANIM,
 static int screen = SCR_INTRO;
 static const char *pending_toast;
 static void mc_load(int slot);
+static void mc_open_game(int gi);
+static int mc_game = -1;          /* memory cards screen: >= 0 shows only that game's saves */
 static float screen_t;
 static int view[MAX_GAMES], nview;
 static int filter = FILTER_ALL;
@@ -616,7 +619,8 @@ static void update_details(uint32_t p) {
     if (details_scroll < 0) details_scroll = 0;
     if (p & BTN_X) details_shot ^= 1;
     if (p & BTN_A) request_launch(view[cur]);
-    if (p & BTN_Y || p & BTN_Z) { g->favorite = !g->favorite; stats_save(); audio_sfx(SFX_SELECT); }
+    if (p & BTN_Y) { g->favorite = !g->favorite; stats_save(); audio_sfx(SFX_SELECT); }
+    if (p & BTN_Z) { audio_sfx(SFX_OPEN); mc_open_game(view[cur]); return; }
     if (p & BTN_B) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
     assets_want_shots(view[cur]);
 }
@@ -708,9 +712,9 @@ static void draw_details(void) {
     if (details_lines > vis) ui_scrollbar(rx + 268, y, sh - 6, details_scroll / (float)(details_lines - vis), vis / (float)details_lines);
     if (g->favorite) draw_circle(rx + 268, 92, 6, 0xF4C21AFF);
 
-    static const int gl[] = {G_A, G_B, G_Y, G_LR, G_DPAD};
-    const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_FAVORITE), tr(S_PREV_NEXT), tr(S_SCROLL)};
-    ui_hints(gl, lb, 5);
+    static const int gl[] = {G_A, G_B, G_Y, G_Z, G_LR, G_DPAD};
+    const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_FAVORITE), tr(S_SAVES), tr(S_PREV_NEXT), tr(S_SCROLL)};
+    ui_hints(gl, lb, 6);
     draw_disc_modal();
 }
 
@@ -845,7 +849,7 @@ static void draw_settings(void) {
 
 static void update_system(uint32_t p) {
     if (p & BTN_A) { audio_sfx(SFX_SELECT); open_swiss(); }
-    if (p & BTN_Y) { audio_sfx(SFX_OPEN); screen = SCR_MEMCARD; screen_t = 0; mc_load(0); }
+    if (p & BTN_Y) { audio_sfx(SFX_OPEN); screen = SCR_MEMCARD; screen_t = 0; mc_game = -1; mc_load(0); }
     if (p & (BTN_B | BTN_START)) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
 }
 
@@ -903,30 +907,66 @@ static void draw_system(void) {
 static save_t saves[MAX_SAVES];
 static int nsaves, mc_slot, mc_free, mc_cur;
 static float mc_scroll;
+static char mce_sent[7];          /* last game the GCMCE was switched to */
 
-static void mc_load(int slot) {
-    if (nsaves > 0) memcard_free(saves, nsaves);
+static const char *mc_title(void) { return mc_game >= 0 ? g_games[mc_game].name : tr(S_MEMCARDS); }
+
+static void mc_msg(const char *msg) {
     gfx_begin(th->bg_top);
     ui_background(0);
-    ui_topbar(tr(S_MEMCARDS), NULL);
-    draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, tr(S_READING));
+    ui_topbar(mc_title(), NULL);
+    draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, msg);
     gfx_end();
+}
+
+/* tries: a GCMCE that was just switched is away for a second or two (longer when it creates the card) */
+static void mc_scan(int slot, int tries) {
+    if (nsaves > 0) memcard_free(saves, nsaves);
+    mc_msg(tr(S_READING));
     mc_slot = slot;
-    nsaves = memcard_scan(slot, saves, MAX_SAVES, &mc_free);
+    while ((nsaves = memcard_scan(slot, saves, MAX_SAVES, &mc_free)) < 0 && --tries > 0) usleep(500000);
+    if (mc_game >= 0 && nsaves > 0) {
+        int k = 0;
+        for (int i = 0; i < nsaves; i++) {
+            if (!strncmp(saves[i].gamecode, g_games[mc_game].id, 4)) saves[k++] = saves[i];
+            else memcard_free(&saves[i], 1);
+        }
+        nsaves = k;
+    }
     mc_cur = 0;
     mc_scroll = 0;
+}
+
+static void mc_load(int slot) { mc_scan(slot, 1); }
+
+/* the game's saves: a GCMCE / MemCard PRO is first switched to that game's virtual card */
+static void mc_open_game(int gi) {
+    mc_game = gi;
+    screen = SCR_MEMCARD;
+    screen_t = 0;
+    int slot = memcard_is_mce(0) ? 0 : memcard_is_mce(1) ? 1 : -1;
+    if (slot >= 0 && strcmp(mce_sent, g_games[gi].id)) {
+        mc_msg(tr(S_MCE_SWITCHING));
+        if (memcard_mce_set_game(slot, g_games[gi].id)) {
+            snprintf(mce_sent, sizeof mce_sent, "%s", g_games[gi].id);
+            usleep(1500000);
+            mc_scan(slot, 16);
+            return;
+        }
+    }
+    mc_scan(slot < 0 ? 0 : slot, 1);
 }
 
 static void update_memcard(uint32_t p) {
     if (p & (BTN_L | BTN_R | BTN_LEFT | BTN_RIGHT)) { audio_sfx(SFX_OPEN); mc_load(!mc_slot); }
     if (p & BTN_UP && mc_cur > 0) { mc_cur--; audio_sfx(SFX_MOVE); }
     if (p & BTN_DOWN && mc_cur < nsaves - 1) { mc_cur++; audio_sfx(SFX_MOVE); }
-    if (p & BTN_B) { if (nsaves > 0) memcard_free(saves, nsaves); nsaves = 0; screen = SCR_SYSTEM; audio_sfx(SFX_BACK); }
+    if (p & BTN_B) { if (nsaves > 0) memcard_free(saves, nsaves); nsaves = 0; screen = mc_game >= 0 ? SCR_DETAILS : SCR_SYSTEM; audio_sfx(SFX_BACK); }
 }
 
 static void draw_memcard(void) {
     ui_background(0);
-    ui_topbar(tr(S_MEMCARDS), NULL);
+    ui_topbar(mc_title(), NULL);
     /* slot tabs */
     for (int s = 0; s < 2; s++) {
         float x = 54 + s * 130;
@@ -937,6 +977,8 @@ static void draw_memcard(void) {
     char buf[64];
     if (nsaves < 0) {
         draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, tr(S_NO_MEMCARD));
+    } else if (nsaves == 0 && mc_game >= 0) {
+        draw_text_center(&g_font_m, SCREEN_W / 2, 220, th->text_dim, tr(S_NO_GAME_SAVES));
     } else {
         int k = snprintf(buf, sizeof buf, tr(S_N_SAVES), nsaves);
         snprintf(buf + k, sizeof buf - k, "   ·   ");

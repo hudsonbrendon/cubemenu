@@ -33,7 +33,9 @@ for the Dreamcast.
   jump by letter with the C-stick, multi-disc games ask which disc to boot.
 - **Play time** per game, measured across reboots, and a System screen with the most played games.
 - **Memory cards**: the saves in slot A and B with their icons, comments, blocks and dates, next to the
-  game's cover (read-only; Swiss's file manager copies and deletes).
+  game's cover (read-only; Swiss's file manager copies and deletes). **Z** on a game's details lists
+  only that game's saves; with a GCMCE or MemCard PRO GC the card first switches to that game's
+  virtual card, the same one Swiss picks when the game boots.
 - **Settings** saved to the card: language, view, background video, game and menu music, UI sounds,
   volume, 24-hour clock, clock adjustment, screensaver, launch animation.
 - **Card tool** (`cube-card`): scans `/games`, downloads covers, disc art, screenshots, synopses,
@@ -100,7 +102,7 @@ IPL replacement's first program) and keep Swiss at `/swiss/boot.dol`.
 | Screen | Buttons |
 |---|---|
 | Shelf / grid / list | ◀ ▶ (▲ ▼) move · **A** play · **Y** details · **X** settings · **B** recently played · **START** system · **L / R** category · **Z** favourite · **C-stick** jump by letter |
-| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **Y** favourite · **B** back |
+| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **Y** favourite · **Z** saves · **B** back |
 | Settings | ▲ ▼ · ◀ ▶ / **A** change · **B** save and close |
 | System | **A** open Swiss (no game) · **Y** memory cards · **B** back |
 | Memory cards | **L / R** slot A / B · ▲ ▼ · **B** back |

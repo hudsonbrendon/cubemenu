@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-10-20
+
+- **Z** on the details screen shows that game's saves. With a GCMCE / MemCard PRO GC in slot A or B,
+  the menu first sends the game's ID (command 0x8B 0x11, as Swiss does when it boots a game), so the
+  card switches to that game's virtual card; plain memory cards are just filtered by game code.
+
 ## 0.1.5 - 2026-10-20
 
 - Play time where the game is: under the title on the shelf, grid and list ("Play time 2h 30m ·

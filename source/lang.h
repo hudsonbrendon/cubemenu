@@ -105,6 +105,9 @@ enum {
     S_AGO_DAYS,
     S_AGO_WEEKS,
     S_AGO_MONTHS,
+    S_SAVES,
+    S_NO_GAME_SAVES,
+    S_MCE_SWITCHING,
     S_COUNT
 };
 #define LANG_COUNT 3

@@ -109,6 +109,9 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "há %d dias",
         "há %d semanas",
         "há %d meses",
+        "Saves",
+        "Nenhum save deste jogo neste cartão",
+        "Trocando o cartão do GCMCE...",
     },
     {
         "Play",
@@ -216,6 +219,9 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "%d days ago",
         "%d weeks ago",
         "%d months ago",
+        "Saves",
+        "No saves of this game on this card",
+        "Switching the GCMCE card...",
     },
     {
         "Jugar",
@@ -323,6 +329,9 @@ static const char *const T[LANG_COUNT][S_COUNT] = {
         "hace %d días",
         "hace %d semanas",
         "hace %d meses",
+        "Partidas",
+        "No hay partidas de este juego en esta tarjeta",
+        "Cambiando la tarjeta del GCMCE...",
     },
 };
 

@@ -62,6 +62,9 @@ static void load_meta(game_t *g) {
     g->has_music = ini_get_int(&ini, "music", 0);
     g->has_shot[0] = ini_get_int(&ini, "snap", 0);
     g->has_shot[1] = ini_get_int(&ini, "title_shot", 0);
+    g->has_manual = ini_get_int(&ini, "manual", 0);
+    static const char *const HL[3] = {"hltb_main", "hltb_plus", "hltb_all"};
+    for (int i = 0; i < 3; i++) g->hltb[i] = ini_get_int(&ini, HL[i], 0);
     for (int l = 0; l < NLANG; l++) {
         if ((v = ini_get(&ini, LANG_KEYS[l])) && *v) {
             g->synopsis[l] = strdup(v);
@@ -309,6 +312,7 @@ int game_launch_path(char *buf, int n, const game_t *g, int disc) {
 
 static char credit_msg[96];
 static uint32_t ach_seen, ach_new;
+static bool just_played;
 
 void fmt_playtime(char *buf, int n, uint32_t s) {
     if (s < 60) snprintf(buf, n, "%um", s ? 1u : 0u);
@@ -343,6 +347,7 @@ void stats_load(void) {
             for (int i = 0; i < g_ngames; i++) {
                 if (strcmp(g_games[i].id, id)) continue;
                 long dt = (long)now - (long)t0;
+                just_played = dt >= 0 && dt < 6 * 3600;
                 if (dt > 30 && dt < 12 * 3600) {     /* ignore clock jumps and forgotten consoles */
                     g_games[i].playtime += dt;
                     if ((uint32_t)dt > g_games[i].best_session) g_games[i].best_session = dt;
@@ -393,6 +398,7 @@ void stats_mark_launch(game_t *g) {
 const char *stats_credit_message(void) { return credit_msg[0] ? credit_msg : NULL; }
 
 uint32_t achievements_new(void) { return ach_new; }
+bool stats_just_played(void) { return just_played; }
 
 uint32_t achievements(void) {
     uint32_t total = 0, best = 0, top = 0, m = 0;

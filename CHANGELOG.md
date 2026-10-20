@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 - 2026-10-20
+
+- Manuals: **START** on the details screen opens the game's scanned manual, two pages at a time
+  like the booklet; **A** zooms into a page (▲ ▼ to scroll). `cube-card fetch --manual` finds the
+  scan on archive.org (English first, then Spanish) and `build` packs the pages as `manual.gxm`.
+- Time to beat: HowLongToBeat's main-story time on the details screen, with how far your play time
+  is into it (`cube-card fetch --hltb`).
+- Continue playing (Settings → Library): at power on, a 3-second countdown, then the last game (and
+  disc) starts; any button cancels, **A** starts it at once. Not when a game was started less than
+  6 hours earlier, so coming back from a game shows the menu.
+
 ## 0.2.0 - 2026-10-20
 
 - Apps and emulators: `/apps/<folder>` with a `.dol` / `.dol+cli` shows up on an Apps shelf with a

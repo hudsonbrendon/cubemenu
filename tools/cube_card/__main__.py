@@ -52,13 +52,24 @@ def cmd_scan(a):
 def cmd_fetch(a):
     games = scan(a.sd)
     if a.only: games = [g for g in games if g["id"] in a.only.split(",")]
-    every = not (a.art or a.synopsis or a.videos or a.music)
-    if every or a.synopsis:      # GameTDB's title finds the right article more often than the disc header's
+    every = not (a.art or a.synopsis or a.videos or a.music or a.manual or a.hltb)
+    if every or a.synopsis or a.manual or a.hltb:      # GameTDB's title finds the right article more often than the disc header's
         from tools.cube_card import build
         try:
             tdb = build.load_tdb(os.path.join(a.sd, "cubemenu", "src"))
             for g in games: g["tdb_title"] = tdb.get(g["id"], {}).get("title", "")
         except Exception as e: print(f"  !! GameTDB: {e}")
+    if a.manual and not every:          # archive.org is slow per file: several games at a time
+        from concurrent.futures import ThreadPoolExecutor
+        def one(g):
+            src = os.path.join(a.sd, "cubemenu", "src", g["id"])
+            os.makedirs(src, exist_ok=True)
+            try: fetch.fetch_manual(g, src, a.force)
+            except Exception as e: print(f"  !! {g['id']} {g['name']}: {e}"[:300])
+            sys.stdout.flush()
+        with ThreadPoolExecutor(6) as ex: list(ex.map(one, games))
+        if not a.hltb: return
+        a.manual = False
     for g in games:
         src = os.path.join(a.sd, "cubemenu", "src", g["id"])
         os.makedirs(src, exist_ok=True)
@@ -67,6 +78,8 @@ def cmd_fetch(a):
             if every or a.synopsis: fetch.fetch_synopses(g, src, a.force)
             if every or a.videos: fetch.fetch_video(g, src, a.force)
             if every or a.music: fetch.fetch_music(g, src, a.force)
+            if every or a.hltb: fetch.fetch_hltb(g, src, a.force)
+            if every or a.manual: fetch.fetch_manual(g, src, a.force)
         except Exception as e:
             print(f"  !! {g['id']} {g['name']}: {e}"[:300])
         sys.stdout.flush()
@@ -89,7 +102,7 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("scan"); s.add_argument("sd"); s.set_defaults(fn=cmd_scan)
     s = sub.add_parser("fetch"); s.add_argument("sd")
-    for flag in ("--art", "--synopsis", "--videos", "--music", "--force"): s.add_argument(flag, action="store_true")
+    for flag in ("--art", "--synopsis", "--videos", "--music", "--manual", "--hltb", "--force"): s.add_argument(flag, action="store_true")
     s.add_argument("--only"); s.set_defaults(fn=cmd_fetch)
     s = sub.add_parser("build"); s.add_argument("sd"); s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_build)
     s = sub.add_parser("install"); s.add_argument("sd"); s.add_argument("--iso", default="dist/boot.iso")

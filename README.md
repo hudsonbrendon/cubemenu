@@ -41,6 +41,9 @@ for the Dreamcast.
   widescreen, alpha dithering, anisotropic filter), the game's collections, and its cheats from
   `swiss/cheats/<ID>.txt` to switch on and off. Written to Swiss's own files
   (`swiss/settings/game/<ID>.ini`, `swiss/cheats/<ID>.chtsel`), so Swiss applies them at boot.
+- **Manuals and time to beat**: **START** on the details screen opens the game's scanned manual
+  (from archive.org), and the details show HowLongToBeat's time to beat next to your play time.
+- **Continue playing**: optionally, at power on the last game starts after a 3-second countdown.
 - **Achievements**: ten of them, from play time, sessions, collections and favourites, on the System
   screen (**X**), with a notice when one unlocks.
 - **Play time** per game, measured across reboots, and a System screen with the most played games.
@@ -115,7 +118,8 @@ IPL replacement's first program) and keep Swiss at `/swiss/boot.dol`.
 | Screen | Buttons |
 |---|---|
 | Shelf / grid / list | ◀ ▶ (▲ ▼) move · **A** play · **Y** details · **X** settings · **B** recently played · **START** system · **L / R** category · **Z** favourite · **C-stick** ◀ ▶ jump by letter, ▼ random game |
-| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **X** game options · **Y** favourite · **Z** saves · **B** back |
+| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **X** game options · **Y** favourite · **Z** saves · **START** manual · **B** back |
+| Manual | **L / R** or ◀ ▶ turn · **A** zoom (▲ ▼ scroll) · **B** back |
 | Game options | ▲ ▼ · ◀ ▶ / **A** change · **B** save and close |
 | Settings | ▲ ▼ · ◀ ▶ / **A** change · **B** save and close |
 | System | **A** open Swiss (no game) · **Y** memory cards · **X** achievements · **B** back |

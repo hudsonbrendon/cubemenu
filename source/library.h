@@ -17,7 +17,8 @@ typedef struct {
     char developer[48], publisher[48], genre[40], players[8], rating[16];
     int year;
     char *synopsis[NLANG];            /* pt, en, es; NULL when missing */
-    bool has_clip, has_music, has_shot[2];
+    bool has_clip, has_music, has_shot[2], has_manual;
+    uint32_t hltb[3];                 /* HowLongToBeat: main story, + extras, completionist (seconds, 0 = unknown) */
     /* stats */
     uint32_t playtime;                /* seconds */
     uint32_t launches;
@@ -55,7 +56,8 @@ uint32_t achievements_new(void);      /* unlocked since the last boot (read by s
 void stats_load(void);
 void stats_save(void);
 void stats_mark_launch(game_t *g);
-const char *stats_credit_message(void);   /* "+1h 20m in Pikmin" after a credited session, else NULL */
+const char *stats_credit_message(void);
+bool stats_just_played(void);             /* a game was started less than 6 h before this boot: back from it */   /* "+1h 20m in Pikmin" after a credited session, else NULL */
 void fmt_playtime(char *buf, int n, uint32_t secs);
 
 /* views over the library */

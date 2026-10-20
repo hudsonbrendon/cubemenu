@@ -34,7 +34,7 @@
 
 enum { I_H_VISUAL, I_THEME, I_LANG, I_VIEW, I_BGVIDEO, I_SHOWDISC, I_LAUNCHANIM,
        I_H_AUDIO, I_GAMEMUSIC, I_MENUMUSIC, I_SFX, I_VOLUME,
-       I_H_LIBRARY, I_SORT,
+       I_H_LIBRARY, I_SORT, I_RESUME,
        I_H_SYSTEM, I_CLOCK24, I_CLOCKADJ, I_SAVER, I_OPENSWISS, I_RESET, I_COUNT };
 
 static int screen = SCR_INTRO;
@@ -43,6 +43,7 @@ static void mc_load(int slot);
 static void mc_open_game(int gi);
 static int mc_game = -1;          /* memory cards screen: >= 0 shows only that game's saves */
 static void opts_open(int gi);
+static void manual_open(int gi);
 static float screen_t;
 static int view[MAX_GAMES], nview;
 static int filter = FILTER_ALL;
@@ -247,6 +248,7 @@ static void do_boot(void) {
     const char *swiss = boot_find_swiss();
     stats_mark_launch(g);
     snprintf(g_set.last_game, sizeof g_set.last_game, "%s", g->id);
+    g_set.last_disc = launch_disc;
     settings_save();
     game_launch_path(launch_path, sizeof launch_path, g, launch_disc);
     snprintf(arg, sizeof arg, "Autoload=%s", launch_path);
@@ -699,6 +701,7 @@ static void update_details(uint32_t p) {
     if (p & BTN_Y) { g->favorite = !g->favorite; stats_save(); audio_sfx(SFX_SELECT); }
     if ((p & BTN_Z) && !g->is_app) { audio_sfx(SFX_OPEN); mc_open_game(view[cur]); return; }
     if ((p & BTN_X) && !g->is_app) { audio_sfx(SFX_OPEN); opts_open(view[cur]); return; }
+    if ((p & BTN_START) && g->has_manual) { audio_sfx(SFX_OPEN); manual_open(view[cur]); return; }
     if (p & BTN_B) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
     assets_want_shots(view[cur]);
 }
@@ -737,27 +740,34 @@ static void draw_details(void) {
     draw_text(&g_font_s, lx, sy, th->text_dim, tr(S_SCREENSHOTS));
     const tex_t *shots[2] = {snap, title};
     for (int i = 0; i < 2; i++) {
-        float x = lx + i * 140, y = sy + 22, w = 132, h = 74;   /* 4:3 shots shown cropped to fit the stats below */
+        float x = lx + i * 140, y = sy + 22, w = 132, h = 62;   /* 4:3 shots shown cropped to fit the stats below */
         bool sel = details_shot == i;
         draw_round_rect(x - 3, y - 3, w + 6, h + 6, 6, sel ? col_alpha(th->accent, in) : col_alpha(0x000000FF, 0.5f * in));
-        if (shots[i]) draw_tex_uv(shots[i], x, y, w, h, 0, 0.11f, 1, 0.89f, col_alpha(0xFFFFFFFF, in));
+        if (shots[i]) draw_tex_uv(shots[i], x, y, w, h, 0, 0.16f, 1, 0.84f, col_alpha(0xFFFFFFFF, in));
         else {
             draw_rect_grad(x, y, w, h, 0x2B2B33FF, 0x111116FF);
             draw_tex(&g_tex_emblem, x + w / 2 - 22, y + h / 2 - 22, 44, 44, 0xFFFFFF60);
         }
     }
-    /* play stats: time, last played, sessions; one row each, label left, value right */
+    /* play stats: time, last played, sessions, time to beat; one row each, label left, value right */
     {
-        float py = sy + 22 + 74 + 9, pw = 272, rh = 19;
-        ui_panel(lx - 4, py, pw + 8, rh * 3 + 9, 1.2f * in);
-        char v[3][32];
-        if (g->playtime || g->last_played) { fmt_playtime(v[0], 32, g->playtime); fmt_ago(v[1], 32, g->last_played); }
-        else { snprintf(v[0], 32, "%s", tr(S_NEVER_PLAYED)); snprintf(v[1], 32, "-"); }
-        snprintf(v[2], 32, "%u", (unsigned)g->launches);
-        const int lab[3] = {S_PLAYTIME, S_LAST_PLAYED, S_LAUNCHES};
-        for (int i = 0; i < 3; i++) {
+        float py = sy + 22 + 62 + 8, pw = 272, rh = 18;
+        ui_panel(lx - 4, py, pw + 8, rh * 4 + 9, 1.2f * in);
+        char v[4][40];
+        if (g->playtime || g->last_played) { fmt_playtime(v[0], 40, g->playtime); fmt_ago(v[1], 40, g->last_played); }
+        else { snprintf(v[0], 40, "%s", tr(S_NEVER_PLAYED)); snprintf(v[1], 40, "-"); }
+        snprintf(v[2], 40, "%u", (unsigned)g->launches);
+        /* HowLongToBeat's main story, and how far your play time is into it */
+        if (g->hltb[0]) {
+            char hb[24];
+            snprintf(hb, sizeof hb, "%uh", (unsigned)((g->hltb[0] + 1800) / 3600));
+            if (g->playtime) snprintf(v[3], 40, "~%s  ·  %u%%", hb, (unsigned)((uint64_t)g->playtime * 100 / g->hltb[0]));
+            else snprintf(v[3], 40, "~%s", hb);
+        } else snprintf(v[3], 40, "-");
+        const int lab[4] = {S_PLAYTIME, S_LAST_PLAYED, S_LAUNCHES, S_TIME_TO_BEAT};
+        for (int i = 0; i < 4; i++) {
             float ry = py + 4 + i * rh;
-            uint32_t vc = i == 0 && g->playtime ? th->accent : th->text_hi;
+            uint32_t vc = (i == 0 && g->playtime) || (i == 3 && g->hltb[0] && g->playtime >= g->hltb[0]) ? th->accent : th->text_hi;
             if (i == 0) clock_icon(lx + 8, ry + g_font_s.ascent * 0.55f + 1, 7, col_alpha(vc, in));
             draw_text(&g_font_s, lx + 22, ry, col_alpha(th->text_dim, in), tr(lab[i]));
             draw_text_right(&g_font_s, lx + pw - 6, ry, col_alpha(vc, in), v[i]);
@@ -795,9 +805,12 @@ static void draw_details(void) {
         const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_FAVORITE), tr(S_PREV_NEXT), tr(S_SCROLL)};
         ui_hints(gl, lb, 5);
     } else {
-        static const int gl[] = {G_A, G_B, G_X, G_Y, G_Z, G_LR};
-        const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_OPTIONS), tr(S_FAVORITE), tr(S_SAVES), tr(S_PREV_NEXT)};
-        ui_hints(gl, lb, 6);
+        static const int gl[] = {G_A, G_B, G_X, G_START, G_Y, G_Z};
+        const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_OPTIONS), tr(S_MANUAL), tr(S_FAVORITE), tr(S_SAVES)};
+        static const int gl2[] = {G_A, G_B, G_X, G_Y, G_Z, G_LR};
+        const char *lb2[] = {tr(S_PLAY), tr(S_BACK), tr(S_OPTIONS), tr(S_FAVORITE), tr(S_SAVES), tr(S_PREV_NEXT)};
+        if (g->has_manual) ui_hints(gl, lb, 6);
+        else ui_hints(gl2, lb2, 6);
     }
     draw_disc_modal();
 }
@@ -810,7 +823,7 @@ static bool is_header(int i) { return i == I_H_VISUAL || i == I_H_AUDIO || i == 
 
 static int item_label(int i) {
     static const int L[I_COUNT] = {S_SECTION_VISUAL, S_THEME, S_LANGUAGE, S_VIEW, S_BG_VIDEO, S_SHOW_DISC, S_LAUNCH_ANIM,
-        S_SECTION_AUDIO, S_GAME_MUSIC, S_MENU_MUSIC, S_UI_SOUNDS, S_VOLUME, S_SECTION_LIBRARY, S_SORT,
+        S_SECTION_AUDIO, S_GAME_MUSIC, S_MENU_MUSIC, S_UI_SOUNDS, S_VOLUME, S_SECTION_LIBRARY, S_SORT, S_RESUME,
         S_SECTION_SYSTEM, S_CLOCK_24H, S_CLOCK_ADJUST, S_SCREENSAVER, S_OPEN_SWISS, S_RESET_DEFAULTS};
     return L[i];
 }
@@ -831,6 +844,7 @@ static const char *item_value(int i, char *buf, int n) {
     case I_VOLUME: snprintf(buf, n, "%d%%", g_set.volume * 10); return buf;
     case I_SORT: return tr(g_set.sort == SORT_GENRE ? S_SORT_GENRE : S_SORT_NAME + g_set.sort);
     case I_CLOCK24: return onoff(g_set.clock24);
+    case I_RESUME: return onoff(g_set.resume);
     case I_CLOCKADJ: { char clk[16]; ui_clock_string(clk, sizeof clk);
         snprintf(buf, n, "%s  (%+d:%02d)", clk, g_set.clock_offset / 60, abs(g_set.clock_offset) % 60); return buf; }
     case I_SAVER: if (!g_set.screensaver) return tr(S_OFF); snprintf(buf, n, tr(S_MINUTES), g_set.screensaver); return buf;
@@ -854,6 +868,7 @@ static void change_item(int i, int d) {
     case I_VOLUME: g_set.volume = g_set.volume + d < 0 ? 0 : g_set.volume + d > 10 ? 10 : g_set.volume + d; audio_volume(g_set.volume); break;
     case I_SORT: { game_t *g = cur_game(); g_set.sort = (g_set.sort + d + SORT_COUNT) % SORT_COUNT; rebuild_view(g ? g->id : NULL); break; }
     case I_CLOCK24: g_set.clock24 = !g_set.clock24; break;
+    case I_RESUME: g_set.resume = !g_set.resume; break;
     case I_CLOCKADJ: g_set.clock_offset += d * 15; if (g_set.clock_offset > 24 * 60) g_set.clock_offset = 24 * 60; if (g_set.clock_offset < -24 * 60) g_set.clock_offset = -24 * 60; break;
     case I_SAVER: { int k = 0; for (int j = 0; j < 7; j++) if (savers[j] == g_set.screensaver) k = j;
         k = (k + d + 7) % 7; g_set.screensaver = savers[k]; break; }
@@ -1247,6 +1262,179 @@ static void draw_gameopts(void) {
     ui_hints(gl, lb, 3);
 }
 
+/* ---------------- manual: the scanned pages, two at a time like the booklet ---------------- */
+
+static FILE *man_f;
+static int man_game, man_n, man_w, man_h, man_spread, man_page[2] = {-1, -1};
+static bool man_zoom;
+static int man_zslot;             /* zoomed in: the left (0) or right (1) page of the spread */
+static float man_scroll, man_t;
+static tex_t man_tex[2];
+
+/* page k of the file in texture slot */
+static void man_load(int slot, int k) {
+    if (k < 0 || k >= man_n || man_page[slot] == k || !man_tex[slot].data) return;
+    fseek(man_f, 32 + (long)k * (man_w * man_h / 2), SEEK_SET);
+    if (fread(man_tex[slot].data, 1, man_w * man_h / 2, man_f) == (size_t)(man_w * man_h / 2)) {
+        tex_update(&man_tex[slot]);
+        man_page[slot] = k;
+    }
+}
+
+/* spread 0 is the cover alone; spread s shows pages 2s-1 and 2s */
+static int man_spreads(void) { return 1 + man_n / 2; }
+static void man_pages(int s, int *a, int *b) { *a = s ? 2 * s - 1 : 0; *b = s && 2 * s < man_n ? 2 * s : -1; }
+
+static void man_show(void) {
+    int a, b;
+    man_pages(man_spread, &a, &b);
+    man_load(0, a);
+    man_load(1, b);
+    man_t = 0;
+}
+
+static void manual_close(void) {
+    if (man_f) fclose(man_f);
+    man_f = NULL;
+    tex_free(&man_tex[0]);
+    tex_free(&man_tex[1]);
+    man_page[0] = man_page[1] = -1;
+}
+
+static void manual_open(int gi) {
+    char rel[96], path[160];
+    game_asset_path(rel, sizeof rel, &g_games[gi], "manual.gxm");
+    man_f = fopen(fs_path(path, sizeof path, rel), "rb");
+    uint8_t h[32];
+    if (!man_f || fread(h, 1, 32, man_f) != 32 || memcmp(h, "GXM1", 4)) { manual_close(); return; }
+    man_n = h[4] << 8 | h[5];
+    man_w = h[6] << 8 | h[7];
+    man_h = h[8] << 8 | h[9];
+    if (!man_n || !tex_create(&man_tex[0], man_w, man_h, GX_TF_CMPR) || !tex_create(&man_tex[1], man_w, man_h, GX_TF_CMPR)) { manual_close(); return; }
+    man_game = gi;
+    man_spread = 0;
+    man_zoom = false;
+    man_show();
+    screen = SCR_MANUAL;
+    screen_t = 0;
+}
+
+static void update_manual(uint32_t p) {
+    int d = p & (BTN_RIGHT | BTN_R) ? 1 : p & (BTN_LEFT | BTN_L) ? -1 : 0;
+    int a, b;
+    man_pages(man_spread, &a, &b);
+    if (d && man_zoom && ((d > 0 && man_zslot == 0 && b >= 0) || (d < 0 && man_zslot == 1))) {
+        man_zslot += d;                 /* the other page of the same spread */
+        man_scroll = 0;
+        audio_sfx(SFX_MOVE);
+    } else if (d && man_spread + d >= 0 && man_spread + d < man_spreads()) {
+        man_spread += d;
+        man_pages(man_spread, &a, &b);
+        man_zslot = d < 0 && b >= 0 ? 1 : 0;
+        man_scroll = 0;
+        man_show();
+        audio_sfx(SFX_MOVE);
+    }
+    if (p & BTN_A) { man_zoom = !man_zoom; man_zslot = 0; man_scroll = 0; audio_sfx(SFX_MOVE); }
+    if (man_zoom) man_scroll += (input_held() & BTN_DOWN ? 1 : input_held() & BTN_UP ? -1 : 0) * 9;
+    if (p & BTN_B) { if (man_zoom) { man_zoom = false; audio_sfx(SFX_BACK); } else { manual_close(); screen = SCR_DETAILS; audio_sfx(SFX_BACK); } }
+}
+
+static void draw_manual(void) {
+    game_t *g = &g_games[man_game];
+    draw_rect_grad(0, 0, SCREEN_W, SCREEN_H, 0x0E0E12FF, 0x050507FF);
+    ui_topbar(tr(S_MANUAL), g->name);
+    int a, b;
+    man_pages(man_spread, &a, &b);
+    float in = ease_out(clampf(man_t / 0.25f, 0, 1));
+    man_t += 1 / 60.0f;
+    char buf[48];
+    if (man_zoom) {
+        /* the left page (or the only one) across the width, scrolled with the d-pad */
+        float w = SCREEN_W - 40, h = w * man_h / man_w, top = 60, view = SCREEN_H - top - 48;
+        float maxs = h - view;
+        if (man_scroll > maxs) man_scroll = maxs;
+        if (man_scroll < 0) man_scroll = 0;
+        int slot = b >= 0 ? man_zslot : 0;
+        draw_tex_uv(&man_tex[slot], 20, top, w, view, 0, man_scroll / h, 1, (man_scroll + view) / h, 0xFFFFFFFF);
+        ui_scrollbar(SCREEN_W - 12, top, view, maxs > 0 ? man_scroll / maxs : 0, view / h);
+    } else {
+        float top = 62, ph = SCREEN_H - top - 50, pw = ph * man_w / man_h, gap = 6;
+        float off = (1 - in) * 20;
+        if (b < 0) draw_tex(&man_tex[0], (SCREEN_W - pw) / 2 + off, top, pw, ph, col_alpha(0xFFFFFFFF, in));
+        else {
+            float x0 = SCREEN_W / 2 - pw - gap / 2;
+            draw_rect(x0 - 2, top - 2, 2 * pw + gap + 4, ph + 4, 0x000000A0);
+            draw_tex(&man_tex[0], x0 + off, top, pw, ph, col_alpha(0xFFFFFFFF, in));
+            draw_tex(&man_tex[1], x0 + pw + gap + off, top, pw, ph, col_alpha(0xFFFFFFFF, in));
+            draw_rect_grad(SCREEN_W / 2 - 10, top, 10, ph, 0x00000000, 0x00000060);   /* the fold */
+            draw_rect_grad(SCREEN_W / 2, top, 10, ph, 0x00000060, 0x00000000);
+        }
+    }
+    if (b < 0) snprintf(buf, sizeof buf, tr(S_PAGE), a + 1, man_n);
+    else snprintf(buf, sizeof buf, tr(S_PAGES), a + 1, b + 1, man_n);
+    draw_text_right(&g_font_s, SCREEN_W - 24, SCREEN_H - 40, th->text_dim, buf);
+    static const int gl[] = {G_LR, G_A, G_B};
+    const char *lb[] = {tr(S_TURN), tr(S_ZOOM), tr(S_BACK)};
+    ui_hints(gl, lb, 3);
+}
+
+/* ---------------- continue: the last game after a countdown, at power on ---------------- */
+
+#define RESUME_SECONDS 3
+static int resume_game = -1;
+
+static bool resume_check(void) {
+    if (!g_set.resume || !card_ok || stats_just_played() || !g_set.last_game[0]) return false;
+    for (int i = 0; i < g_ngames; i++)
+        if (!strcmp(g_games[i].id, g_set.last_game) && !g_games[i].is_app && g_games[i].launches) { resume_game = i; return true; }
+    return false;
+}
+
+static void update_resume(uint32_t p) {
+    if (p & BTN_A || screen_t >= RESUME_SECONDS) {
+        game_t *g = &g_games[resume_game];
+        screen = SCR_LIBRARY;
+        audio_sfx(SFX_SELECT);
+        start_launch(resume_game, g_set.last_disc < g->ndisc ? g_set.last_disc : 0);
+    } else if (p) { screen = SCR_LIBRARY; screen_t = 0; audio_sfx(SFX_BACK); }
+}
+
+static void draw_resume(void) {
+    draw_library();
+    game_t *g = &g_games[resume_game];
+    float in = ease_out(clampf(screen_t / 0.3f, 0, 1));
+    draw_rect(0, 0, SCREEN_W, SCREEN_H, col_alpha(0x000000C0, in));
+    float w = 420, h = 200, x = (SCREEN_W - w) / 2, y = 120 + (1 - in) * 16;
+    ui_panel(x, y, w, h, 1.6f * in);
+    const tex_t *c = assets_get(resume_game, AS_CASE);
+    if (c) draw_tex_uv(c, x + 24, y + 24, 108, 152, 0.5254f, 0, 1, 1, col_alpha(0xFFFFFFFF, in));
+    float tx = x + 152;
+    draw_text(&g_font_s, tx, y + 28, col_alpha(th->accent, in), tr(S_CONTINUE));
+    draw_text_wrap(&g_font_m, tx, y + 52, w - 172, 28, 0, 2, col_alpha(th->text_hi, in), g->name);
+    /* a ring that empties with the countdown */
+    float left = clampf(1 - screen_t / RESUME_SECONDS, 0, 1);
+    float cx = tx + 22, cy = y + 150;
+    draw_ring(cx, cy, 16, 20, col_alpha(th->text_hi, 0.15f * in));
+    int seg = 48;
+    for (int i = 0; i < seg * left; i++) {
+        float a0 = -M_PI / 2 + i * 2 * M_PI / seg, a1 = a0 + 2 * M_PI / seg;
+        float q[8] = {cx + cosf(a0) * 16, cy + sinf(a0) * 16, cx + cosf(a0) * 20, cy + sinf(a0) * 20,
+                      cx + cosf(a1) * 20, cy + sinf(a1) * 20, cx + cosf(a1) * 16, cy + sinf(a1) * 16};
+        uint32_t cs[4] = {th->accent, th->accent, th->accent, th->accent};
+        draw_quad_flat(q, cs);
+    }
+    char buf[32];
+    snprintf(buf, sizeof buf, "%d", (int)ceilf(RESUME_SECONDS - screen_t) > 0 ? (int)ceilf(RESUME_SECONDS - screen_t) : 0);
+    draw_text_center(&g_font_s, cx, cy - g_font_s.ascent * 0.55f, col_alpha(th->text_hi, in), buf);
+    snprintf(buf, sizeof buf, tr(S_RESUME_IN), (int)ceilf(RESUME_SECONDS - screen_t));
+    draw_text(&g_font_s, cx + 32, cy - g_font_s.ascent * 0.55f, col_alpha(th->text_dim, in), buf);
+    draw_rect_grad(0, SCREEN_H - 60, SCREEN_W, 60, col_alpha(th->bg_bottom, 0.9f * in), th->bg_bottom);   /* over the shelf's hints */
+    static const int gl[] = {G_A, G_B};
+    const char *lb[] = {tr(S_RESUME_NOW), tr(S_CANCEL)};
+    ui_hints(gl, lb, 2);
+}
+
 /* ---------------- achievements ---------------- */
 
 static void update_achiev(uint32_t p) {
@@ -1419,7 +1607,7 @@ void app_frame(float dt) {
     switch (screen) {
     case SCR_INTRO:
         if ((p & (BTN_A | BTN_START | BTN_B)) || screen_t > 3.2f) {
-            screen = SCR_LIBRARY; screen_t = 0; sel_t = 0; media_started = false;
+            screen = resume_check() && !(p & BTN_B) ? SCR_RESUME : SCR_LIBRARY; screen_t = 0; sel_t = 0; media_started = false;
             if (pending_toast) { ui_toast(pending_toast); pending_toast = NULL; }
         }
         break;
@@ -1430,6 +1618,8 @@ void app_frame(float dt) {
     case SCR_MEMCARD: update_memcard(p); break;
     case SCR_GAMEOPTS: update_gameopts(p); break;
     case SCR_ACHIEV: update_achiev(p); break;
+    case SCR_MANUAL: update_manual(p); break;
+    case SCR_RESUME: update_resume(p); break;
     case SCR_LAUNCH:
         launch_t += dt;
         if (launch_t >= LAUNCH_T_END + 0.2f) do_boot();
@@ -1448,6 +1638,8 @@ void app_frame(float dt) {
     case SCR_MEMCARD: draw_memcard(); break;
     case SCR_GAMEOPTS: draw_gameopts(); break;
     case SCR_ACHIEV: draw_achiev(); break;
+    case SCR_MANUAL: draw_manual(); break;
+    case SCR_RESUME: draw_resume(); break;
     case SCR_LAUNCH: draw_launch(dt); break;
     }
     if (saver) draw_saver();

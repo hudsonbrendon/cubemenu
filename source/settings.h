@@ -19,6 +19,8 @@ typedef struct {
     bool launch_anim;
     bool show_disc;      /* mini disc sliding out of the selected case */
     char last_game[8];
+    int last_disc;
+    bool resume;         /* at power on, a countdown then the last game */
 } settings_t;
 
 extern settings_t g_set;

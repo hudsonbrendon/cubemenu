@@ -157,6 +157,17 @@ enum {
     S_ACH_CURATOR_D,
     S_ACH_EXPLORER,
     S_ACH_EXPLORER_D,
+    S_TIME_TO_BEAT,
+    S_MANUAL,
+    S_PAGE,
+    S_PAGES,
+    S_ZOOM,
+    S_TURN,
+    S_RESUME,
+    S_RESUME_IN,
+    S_RESUME_NOW,
+    S_CANCEL,
+    S_CONTINUE,
     S_COUNT
 };
 #define LANG_COUNT 3

@@ -45,6 +45,8 @@ void settings_load(void) {
     g_set.screensaver = CLAMPI(ini_get_int(&ini, "screensaver", g_set.screensaver), 0, 60);
     g_set.launch_anim = ini_get_int(&ini, "launch_animation", g_set.launch_anim);
     g_set.show_disc = ini_get_int(&ini, "show_disc", g_set.show_disc);
+    g_set.resume = ini_get_int(&ini, "resume", 0);
+    g_set.last_disc = CLAMPI(ini_get_int(&ini, "last_disc", 0), 0, 3);
     const char *v = ini_get(&ini, "last_game");
     if (v) snprintf(g_set.last_game, sizeof g_set.last_game, "%s", v);
     free(txt);
@@ -56,10 +58,10 @@ bool settings_save(void) {
         "# Cube Menu settings (written by the menu)\n"
         "theme=%d\nlanguage=%d\nview=%d\nsort=%d\nbackground_video=%d\ngame_music=%d\nmenu_music=%d\n"
         "ui_sounds=%d\nvolume=%d\nclock_24h=%d\nclock_offset=%d\nscreensaver=%d\nlaunch_animation=%d\n"
-        "show_disc=%d\nlast_game=%s\n",
+        "show_disc=%d\nlast_game=%s\nlast_disc=%d\nresume=%d\n",
         g_set.theme, g_set.lang, g_set.view, g_set.sort, g_set.bg_video, g_set.game_music, g_set.menu_music,
         g_set.sfx, g_set.volume, g_set.clock24, g_set.clock_offset, g_set.screensaver, g_set.launch_anim,
-        g_set.show_disc, g_set.last_game);
+        g_set.show_disc, g_set.last_game, g_set.last_disc, g_set.resume);
     char path[96];
     return fs_write_all(fs_path(path, sizeof path, "/cubemenu/settings.ini"), buf, n);
 }

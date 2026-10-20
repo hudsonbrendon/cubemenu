@@ -215,6 +215,151 @@ def fetch_music(g, src, force=False, log=print):
     log(f"  {'ok' if rr.returncode == 0 else '!!'} {g['id']} {g['name']}: music")
 
 
+# ---------- time to beat (HowLongToBeat) ----------
+HLTB = "https://howlongtobeat.com"
+HLTB_UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36",
+           "Referer": HLTB + "/", "Origin": HLTB}
+_hltb_token = None
+
+
+def _hltb_search(title):
+    """The site's own search: a token from /api/search/site/init, then a POST with it."""
+    global _hltb_token
+    import time
+    inc = {"mode": "include", "values": []}
+    body = {"searchType": "games", "searchTerms": _norm(title).split(), "searchPage": 1, "size": 20,
+            "searchOptions": {"games": {"userId": 0, "platform": inc, "sortCategory": "popular", "rangeCategory": "main",
+                                        "rangeTime": {"min": None, "max": None}, "gameplay": {"perspective": inc, "flow": inc, "genre": inc},
+                                        "year": inc, "modifier": ""}, "users": {"sortCategory": "postcount"},
+                              "lists": {"sortCategory": "follows"}, "filter": "", "sort": 0, "randomizer": 0}, "useCache": True}
+    for attempt in range(2):
+        if not _hltb_token:
+            r = urllib.request.urlopen(urllib.request.Request(f"{HLTB}/api/search/site/init?t={int(time.time() * 1000)}", headers=HLTB_UA), timeout=30)
+            _hltb_token = json.loads(r.read())["token"]
+        req = urllib.request.Request(HLTB + "/api/search/site", data=json.dumps(body).encode(),
+                                     headers=dict(HLTB_UA, **{"Content-Type": "application/json", "x-auth-token": _hltb_token}))
+        try: return json.loads(urllib.request.urlopen(req, timeout=30).read()).get("data", [])
+        except urllib.error.HTTPError as e:
+            if e.code != 403 or attempt: raise
+            _hltb_token = None              # expired: a new one
+    return []
+
+
+def hltb_times(title):
+    """(main, main + extras, completionist) in seconds for the GameCube game, or None."""
+    zero = lambda x: re.sub(r"\bzero\b", "0", x)          # "Resident Evil Zero" is "Resident Evil 0" there
+    want = zero(_norm(title))
+    best = None
+    for r in _hltb_search(title):
+        n = zero(_norm(r.get("game_name", "")))
+        if _digits(n) != _digits(want) or not r.get("comp_main"): continue
+        score = difflib.SequenceMatcher(None, want, n).ratio() + (0.15 if "GameCube" in (r.get("profile_platform") or "") else 0)
+        if score >= 0.85 and (not best or score > best[0]): best = (score, r)
+    if not best: return None
+    r = best[1]
+    return int(r["comp_main"]), int(r.get("comp_plus") or 0), int(r.get("comp_100") or 0)
+
+
+def fetch_hltb(g, src, force=False, log=print):
+    dst = os.path.join(src, "hltb.txt")
+    if os.path.exists(dst) and not force: return
+    t = None
+    for title in [x for x in (g.get("tdb_title"), g["name"]) if x]:
+        try: t = hltb_times(title)
+        except Exception as e: log(f"  !! howlongtobeat: {e}")
+        if t: break
+    if t:
+        with open(dst, "w") as f: f.write("main=%d\nplus=%d\nall=%d\n" % t)
+    log(f"  {'ok' if t else '??'} {g['id']} {g['name']}: time to beat {'%.0fh' % (t[0] / 3600) if t else ''}")
+
+
+# ---------- manual (archive.org scans) ----------
+_LANG_GOOD = r"\b(usa|us|ntsc|canada|english|eng|uk|ukv|na)\b"
+_LANG_ES = r"\b(spain|spanish|esp|espa[nñ]ol)\b"
+_LANG_OTHER = r"\b(german|deutsch|deutsche|ger|dutch|nl|french|fra|fr|italian|ita|japan|japanese|jpn|jp|nor|swedish|korean|korea|kor)\b"
+_SKIP_WORDS = {"the", "of", "and", "a", "an"}
+_NOISE = {"gcn", "ngc", "gamecube", "nintendo", "game", "games", "scans", "scan", "disc", "box", "cover", "covers",
+          "print", "files", "booklet", "usa", "us", "eur", "pal", "ntsc", "uk", "ukv", "spain", "canada", "complete",
+          "high", "quality", "english", "the", "im", "dol"}
+
+
+def manual_item(title):
+    """Best archive.org item that is this game's manual: English first, then unlabelled, then Spanish."""
+    words = [w for w in _norm(title).split() if w not in _SKIP_WORDS]
+    if not words: return None
+    q = "title:(" + " ".join(words) + ") AND (title:manual OR title:instruction*) AND (gamecube OR gcn OR ngc OR dol)"
+    url = "https://archive.org/advancedsearch.php?" + urllib.parse.urlencode(
+        [("q", q), ("fl[]", "identifier"), ("fl[]", "title"), ("fl[]", "language"), ("rows", "25"), ("output", "json")])
+    docs = json.loads(get(url, 60))["response"]["docs"]
+    best = None
+    for d in docs:
+        t = d.get("title") or ""
+        name = _norm(re.split(r"manual|instruction", t, flags=re.I)[0])      # the game's name: what comes before "manual"
+        name = " ".join(w for w in name.split() if w not in _NOISE)
+        if any(w not in name.split() for w in words) or _digits(name) != _digits(_norm(title)): continue   # a sequel
+        if difflib.SequenceMatcher(None, " ".join(words), " ".join(w for w in name.split() if w not in _SKIP_WORDS)).ratio() < 0.8:
+            continue        # more words than the game's: another game of the series (Resident Evil / ... Code Veronica)
+        low = t.lower() + " " + d["identifier"].lower().replace("-", " ").replace("_", " ")
+        lang = d.get("language") or ""
+        lang = " ".join(lang) if isinstance(lang, list) else lang
+        if re.search(_LANG_OTHER, low) or re.search(r"\b(DE|FR|IT|NL|JP|KR)\b", t) or \
+           (lang and not re.search(r"eng|spa|por|english|spanish|portug", lang, re.I)): continue   # a language few players here read
+        score = 3 if re.search(_LANG_GOOD, low) else 1 if re.search(_LANG_ES, low) else 2
+        if not best or score > best[0]: best = (score, d["identifier"], t)
+    return best
+
+
+def _manual_pages(ident, tmp, log):
+    """Downloads the item's pages into tmp as images; returns their paths in order."""
+    meta = json.loads(get(f"https://archive.org/metadata/{ident}", 60))
+    files = meta.get("files", [])
+    base = f"https://archive.org/download/{ident}/"
+    pdfs = sorted([f for f in files if f["name"].lower().endswith(".pdf")], key=lambda f: int(f.get("size") or 1 << 40))
+    # page images: the originals, or the JPEG archive.org makes of a TIFF original; never thumbnails
+    tifs = {os.path.splitext(f["name"])[0] for f in files if re.search(r"\.tiff?$", f["name"], re.I)}
+    imgs = sorted([f for f in files if re.search(r"\.(jpe?g|png)$", f["name"], re.I) and not f["name"].startswith("__ia")
+                   and "_thumb" not in f["name"] and (f.get("source") == "original" or os.path.splitext(f["name"])[0] in tifs)],
+                  key=lambda f: f["name"])
+    if pdfs and int(pdfs[0].get("size") or 0) < 300 << 20: imgs = []        # a PDF is the whole manual; images may be the box
+    if sum(int(f.get("size") or 0) for f in imgs[:64]) > 400 << 20:
+        log(f"  ?? {ident}: the scans are too big to download ({sum(int(f.get('size') or 0) for f in imgs[:64]) >> 20} MB)")
+        return []
+    if imgs:
+        out = []
+        for i, f in enumerate(imgs[:64]):
+            p = os.path.join(tmp, "p%03d%s" % (i, os.path.splitext(f["name"])[1].lower()))
+            with open(p, "wb") as fo: fo.write(get(base + urllib.parse.quote(f["name"]), 300))
+            out.append(p)
+        return out
+    if pdfs and int(pdfs[0].get("size") or 0) < 300 << 20:
+        pdf = os.path.join(tmp, "m.pdf")
+        with open(pdf, "wb") as fo: fo.write(get(base + urllib.parse.quote(pdfs[0]["name"]), 900))
+        subprocess.run(["pdftoppm", "-r", "90", "-jpeg", "-l", "64", pdf, os.path.join(tmp, "p")], check=True, capture_output=True)
+        return sorted(os.path.join(tmp, f) for f in os.listdir(tmp) if f.startswith("p") and f.endswith(".jpg"))
+    return []
+
+
+def fetch_manual(g, src, force=False, log=print):
+    """manual/p000.jpg ... : the pages of a scanned manual, one image each (spreads are split by build)."""
+    dst = os.path.join(src, "manual")
+    if os.path.isdir(dst) and os.listdir(dst) and not force: return
+    item = None
+    for title in [x for x in (g.get("tdb_title"), g["name"]) if x]:
+        try: item = manual_item(title)
+        except Exception as e: log(f"  !! archive.org: {e}")
+        if item: break
+    if not item: log(f"  ?? {g['id']} {g['name']}: manual"); return
+    with tempfile.TemporaryDirectory() as tmp:
+        try: pages = _manual_pages(item[1], tmp, log)
+        except Exception as e: log(f"  !! {g['id']} manual {item[1]}: {e}"); return
+        if len(pages) < 4: log(f"  ?? {g['id']} {g['name']}: manual {item[1]} has {len(pages)} pages, not the whole booklet"); return
+        shutil.rmtree(dst, ignore_errors=True)
+        os.makedirs(dst)
+        for i, p in enumerate(pages): shutil.copyfile(p, os.path.join(dst, "p%03d%s" % (i, os.path.splitext(p)[1])))
+        with open(os.path.join(dst, "source.txt"), "w") as f: f.write(f"https://archive.org/details/{item[1]}\n{item[2]}\n")
+    log(f"  ok {g['id']} {g['name']}: manual, {len(pages)} pages ({item[2]})")
+
+
 if __name__ == "__main__":
     names = ["Super Smash Bros. Melee (USA).png", "Super Smash Bros. Melee (Europe).png", "Metroid Prime (USA).png",
              "Metroid Prime 2 - Echoes (USA).png", "Pikmin (USA).png", "Pikmin 2 (USA).png"]

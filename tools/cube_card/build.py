@@ -5,7 +5,8 @@
   snap.gxt / title.gxt   screenshots, 320x240 CMPR
   clip.cmv   background clip: "CMV1" header + fixed-size CMPR frames (no decoding on the console)
   music.mp3  theme (copied)
-  info.txt   title, developer, publisher, year, genre, players, synopses
+  info.txt   title, developer, publisher, year, genre, players, synopses, time to beat
+  manual.gxm scanned manual: "GXM1" header + one CMPR page after another (416x608 each)
 """
 import os, re, shutil, struct, subprocess, sys, zipfile, io, urllib.request
 import xml.etree.ElementTree as ET
@@ -57,6 +58,11 @@ def write_info(g, src, out, tdb, flags):
             txt = open(p, encoding="utf-8").read().strip()
             paras = [_clean(x) for x in re.split(r"\n\s*\n|\n", txt) if x.strip()]
             lines.append(f"synopsis.{lang}=" + "\\n\\n".join(paras))
+    hl = os.path.join(src, "hltb.txt")
+    if os.path.exists(hl):
+        for line in open(hl):
+            k, _, v = line.strip().partition("=")
+            if v: lines.append(f"hltb_{k}={v}")
     for k, v in flags.items(): lines.append(f"{k}={int(v)}")
     with open(os.path.join(out, "info.txt"), "w", encoding="utf-8") as f: f.write("\n".join(lines) + "\n")
 
@@ -69,6 +75,38 @@ def case_texture(src_png, dst):
 def disc_texture(src_png, dst):
     img = Image.open(src_png).convert("RGBA")
     gx.save(dst, img, gx.RGB5A3, 160, 160)
+
+
+MANUAL_W, MANUAL_H, MANUAL_MAX = 416, 608, 64
+
+
+def manual_pages(src_dir):
+    """Page images in order; a landscape scan is a two-page spread and becomes two pages."""
+    out = []
+    for f in sorted(os.listdir(src_dir)):
+        if not re.match(r"p\d+\.(jpe?g|png)$", f, re.I): continue
+        img = Image.open(os.path.join(src_dir, f)).convert("RGB")
+        if img.width > img.height * 1.15:
+            h = img.width // 2
+            out += [img.crop((0, 0, h, img.height)), img.crop((h, 0, img.width, img.height))]
+        else: out.append(img)
+    return out[:MANUAL_MAX]
+
+
+def manual_texture(src_dir, dst):
+    pages = manual_pages(src_dir)
+    if not pages: return False
+    with open(dst + ".tmp", "wb") as f:
+        f.write(b"GXM1" + struct.pack(">HHHH", len(pages), MANUAL_W, MANUAL_H, 14) + b"\0" * 20)
+        for img in pages:
+            s = min(MANUAL_W / img.width, MANUAL_H / img.height)
+            pg = img.resize((max(1, round(img.width * s)), max(1, round(img.height * s))), Image.LANCZOS)
+            canvas = Image.new("RGB", (MANUAL_W, MANUAL_H), (18, 18, 22))
+            canvas.paste(pg, ((MANUAL_W - pg.width) // 2, (MANUAL_H - pg.height) // 2))
+            a = np.asarray(canvas.convert("RGBA")).copy()
+            f.write(gx.cmpr_array(a))
+    os.replace(dst + ".tmp", dst)
+    return True
 
 
 def shot_texture(src_png, dst):
@@ -121,6 +159,11 @@ def build(sd, games, force=False, log=print):
         m, mo = os.path.join(src, "music.mp3"), os.path.join(out, "music.mp3")
         if os.path.exists(m) and (force or not _fresh(mo, m)): shutil.copyfile(m, mo)
         flags["music"] = os.path.exists(mo)
+        md, mf = os.path.join(src, "manual"), os.path.join(out, "manual.gxm")
+        if os.path.isdir(md) and (force or not _fresh(mf, *[os.path.join(md, x) for x in os.listdir(md)])):
+            try: manual_texture(md, mf)
+            except Exception as e: log(f"  !! {g['id']} manual: {e}")
+        flags["manual"] = os.path.exists(mf)
         write_info(g, src, out, tdb, flags)
         log(f"  ok {g['id']} {g['name']}: " + " ".join(k for k, v in flags.items() if v))
         sys.stdout.flush()

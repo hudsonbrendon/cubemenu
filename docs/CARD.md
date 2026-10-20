@@ -51,6 +51,8 @@ What `fetch` gets, per game ID:
 | `synopsis.pt.txt`, `.en.txt`, `.es.txt` | Wikipedia, lead section of the game's article |
 | `video.mp4` | yt-dlp: a gameplay video (or a trailer), 20 s, no sound |
 | `music.mp3` | yt-dlp: the game's main theme, 60 s |
+| `hltb.txt` | HowLongToBeat: main story, + extras, completionist |
+| `manual/p000.jpg`… | archive.org: a scan of the manual (English, then Spanish) |
 
 You can drop your own files with those names in that folder and run `build`; nothing you put there is
 downloaded again unless you pass `--force`.

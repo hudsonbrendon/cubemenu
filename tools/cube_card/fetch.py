@@ -99,19 +99,34 @@ def _wiki(lang, params):
             if attempt == 2: raise
 
 
-def wiki_synopsis(title, lang):
-    """Lead section of the article whose title matches the game (digits must agree); None if unsure."""
+def wiki_article(title, lang):
+    """Title of the article about the game (digits must agree); None if unsure. An article whose title
+    is shorter than the game's ("The Legend of Zelda" for "... The Wind Waker") is the series, not the game."""
     want = _norm(title)
     res = _wiki(lang, {"action": "query", "list": "search", "srsearch": f"{title} GameCube", "srlimit": 8})["query"]["search"]
     best = None
     for r in res:
         n = _norm(r["title"])
-        if _digits(n) != _digits(want): continue
+        if _digits(n) != _digits(want) or (want.startswith(n + " ") and n != want): continue
         score = difflib.SequenceMatcher(None, want, n).ratio()
-        if n == want or (n.startswith(want + " ") or want.startswith(n + " ")) and score > 0.6: score += 0.5
+        if n == want or n.startswith(want + " ") and score > 0.6: score += 0.5
+        if re.search(r"\((video ?game|jogo eletr[oô]nico|videojuego)", r["title"], re.I): score += 0.1
         if score >= 0.8 and (not best or score > best[0]): best = (score, r["title"])
-    if not best: return None
-    pages = _wiki(lang, {"action": "query", "prop": "extracts", "exintro": 1, "explaintext": 1, "redirects": 1, "titles": best[1]})["query"]["pages"]
+    return best[1] if best else None
+
+
+def wiki_langlink(article, src_lang, lang):
+    """The same article in another Wikipedia."""
+    pages = _wiki(src_lang, {"action": "query", "prop": "langlinks", "lllang": lang, "redirects": 1, "titles": article})["query"]["pages"]
+    ll = list(pages.values())[0].get("langlinks") or []
+    return ll[0]["*"] if ll else None
+
+
+def wiki_synopsis(title, lang, article=None):
+    """Lead section of the game's article; None if unsure."""
+    article = article or wiki_article(title, lang)
+    if not article: return None
+    pages = _wiki(lang, {"action": "query", "prop": "extracts", "exintro": 1, "explaintext": 1, "redirects": 1, "titles": article})["query"]["pages"]
     txt = list(pages.values())[0].get("extract", "").strip()
     if len(txt) < 80 or not re.search(r"gamecube|jogo|game|videojuego|videogame|juego", txt, re.I): return None
     txt = re.sub(r"\s*\([^()]*?[ぁ-んァ-ン一-龯][^()]*\)", "", txt)
@@ -119,14 +134,25 @@ def wiki_synopsis(title, lang):
 
 
 def fetch_synopses(g, src, force=False, log=print):
+    en = None          # the English article, whose language links give the same article elsewhere
+    titles = [t for t in (g.get("tdb_title"), g["name"], g["title"]) if t]
+    for t in titles:
+        try: en = wiki_article(t, "en")
+        except Exception as e: log(f"  !! wikipedia en: {e}")
+        if en: break
     for lang in LANGS:
         dst = os.path.join(src, f"synopsis.{lang}.txt")
         if os.path.exists(dst) and not force: continue
         txt = None
-        for t in (g["name"], g["title"]):
+        try:
+            art = en if lang == "en" else wiki_langlink(en, "en", lang) if en else None
+            if art: txt = wiki_synopsis(None, lang, art)
+        except Exception as e: log(f"  !! wikipedia {lang}: {e}")
+        for t in (() if txt else titles):
             try: txt = wiki_synopsis(t, lang)
             except Exception as e: log(f"  !! wikipedia {lang}: {e}")
             if txt: break
+        if not txt and force and os.path.exists(dst): os.remove(dst)    # a wrong old one is worse than none
         if txt:
             with open(dst, "w", encoding="utf-8") as f: f.write(txt)
         log(f"  {'ok' if txt else '??'} {g['id']} {g['name']}: synopsis.{lang}")

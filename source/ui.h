@@ -22,5 +22,6 @@ void ui_hints(const int *glyphs, const char *const *labels, int n);
 
 void ui_panel(float x, float y, float w, float h, float alpha);
 void ui_toast(const char *msg);            /* shows for 2.5 s */
+bool ui_toast_busy(void);
 void ui_toast_draw(void);
 void ui_scrollbar(float x, float y, float h, float pos, float frac);

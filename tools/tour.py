@@ -80,7 +80,7 @@ def video_script():
     return s
 
 
-def run(sd, script, seconds_cap, ir, games=None, settings=None, stats=None, lang=1, start="GM8E01", speed=1.0):
+def run(sd, script, seconds_cap, ir, games=None, settings=None, stats=None, lang=1, start="GM8E01", speed=1.0, apps=False):
     os.makedirs(os.path.join(ROOT, "tour"), exist_ok=True)
     demo = os.path.join(ROOT, "tour", "demo.txt")
     open(demo, "w").write(script.text())
@@ -90,6 +90,7 @@ def run(sd, script, seconds_cap, ir, games=None, settings=None, stats=None, lang
            "--demo", demo, "--settings", st]
     if stats: cmd += ["--stats", stats]
     if games: cmd += ["--only", games]
+    if apps: cmd += ["--apps"]
     subprocess.run(cmd, check=True)
     with open(os.path.join(UDIR, "Config", "GFX.ini"), "w") as f:
         f.write(f"[Settings]\nInternalResolution = {ir}\nInternalResolutionFrameDumps = True\n")

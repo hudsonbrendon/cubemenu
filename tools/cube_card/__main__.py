@@ -53,6 +53,12 @@ def cmd_fetch(a):
     games = scan(a.sd)
     if a.only: games = [g for g in games if g["id"] in a.only.split(",")]
     every = not (a.art or a.synopsis or a.videos or a.music)
+    if every or a.synopsis:      # GameTDB's title finds the right article more often than the disc header's
+        from tools.cube_card import build
+        try:
+            tdb = build.load_tdb(os.path.join(a.sd, "cubemenu", "src"))
+            for g in games: g["tdb_title"] = tdb.get(g["id"], {}).get("title", "")
+        except Exception as e: print(f"  !! GameTDB: {e}")
     for g in games:
         src = os.path.join(a.sd, "cubemenu", "src", g["id"])
         os.makedirs(src, exist_ok=True)
@@ -69,6 +75,8 @@ def cmd_fetch(a):
 def cmd_build(a):
     from tools.cube_card import build
     build.build(a.sd, scan(a.sd), force=a.force)
+    from tools.cube_card import apps
+    apps.build(a.sd)
 
 
 def cmd_install(a):

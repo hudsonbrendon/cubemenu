@@ -21,3 +21,5 @@ void memcard_free(save_t *s, int n);
 bool memcard_is_mce(int slot);
 /* switches it to the virtual card of game id6 (e.g. GALE01); the card goes away for about a second */
 bool memcard_mce_set_game(int slot, const char *id6);
+/* the saves (all, or one game's: code4) as .gci files in dir; returns how many, -1 when unreadable */
+int memcard_backup(int slot, const char *code4, const char *dir);

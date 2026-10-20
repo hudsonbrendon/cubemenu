@@ -29,11 +29,24 @@ for the Dreamcast.
   onto the spindle, the lid closes, the power light comes on, then the game starts.
 - **Themes in the console colours**: Indigo (default), Jet Black, Platinum, Spice, Emerald Blue and
   Starlight Gold. Buttons are drawn in the controller's colours: A green, B red, X / Y grey, Z purple.
-- **Library**: categories (all, favourites, recently played), sort by name / recent / most played / year,
-  jump by letter with the C-stick, multi-disc games ask which disc to boot.
+- **Library**: categories (all, favourites, recently played, your collections *Playing now*,
+  *Want to play* and *Finished*, multiplayer games, apps), sort by name / recent / most played / year /
+  genre, jump by letter with the C-stick, **C-stick down** for a random game, multi-disc games ask
+  which disc to boot.
+- **Apps and emulators**: every folder in `/apps` with a `.dol` or `.dol+cli` is a case on its own
+  shelf, with a generated cover, a description and play time. Apps with several versions (Game Boy
+  Interface's video profiles) ask which one; a `.cli` next to a `.dol`, or the text after the DOL in a
+  `.dol+cli`, is passed as its arguments, as Swiss does.
+- **Game options** (**X** on the details screen): Swiss's per-game video settings (video mode,
+  widescreen, alpha dithering, anisotropic filter), the game's collections, and its cheats from
+  `swiss/cheats/<ID>.txt` to switch on and off. Written to Swiss's own files
+  (`swiss/settings/game/<ID>.ini`, `swiss/cheats/<ID>.chtsel`), so Swiss applies them at boot.
+- **Achievements**: ten of them, from play time, sessions, collections and favourites, on the System
+  screen (**X**), with a notice when one unlocks.
 - **Play time** per game, measured across reboots, and a System screen with the most played games.
 - **Memory cards**: the saves in slot A and B with their icons, comments, blocks and dates, next to the
-  game's cover (read-only; Swiss's file manager copies and deletes). **Z** on a game's details lists
+  game's cover. **X** backs them up to `/cubemenu/backup/` as `.gci` files (Swiss and Dolphin
+  import them); the menu never writes to a memory card. **Z** on a game's details lists
   only that game's saves; with a GCMCE or MemCard PRO GC the card first switches to that game's
   virtual card, the same one Swiss picks when the game boots.
 - **Settings** saved to the card: language, view, background video, game and menu music, UI sounds,
@@ -101,11 +114,12 @@ IPL replacement's first program) and keep Swiss at `/swiss/boot.dol`.
 
 | Screen | Buttons |
 |---|---|
-| Shelf / grid / list | ◀ ▶ (▲ ▼) move · **A** play · **Y** details · **X** settings · **B** recently played · **START** system · **L / R** category · **Z** favourite · **C-stick** jump by letter |
-| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **Y** favourite · **Z** saves · **B** back |
+| Shelf / grid / list | ◀ ▶ (▲ ▼) move · **A** play · **Y** details · **X** settings · **B** recently played · **START** system · **L / R** category · **Z** favourite · **C-stick** ◀ ▶ jump by letter, ▼ random game |
+| Details | **L / R** or ◀ ▶ previous / next game · ▲ ▼ scroll · **A** play · **X** game options · **Y** favourite · **Z** saves · **B** back |
+| Game options | ▲ ▼ · ◀ ▶ / **A** change · **B** save and close |
 | Settings | ▲ ▼ · ◀ ▶ / **A** change · **B** save and close |
-| System | **A** open Swiss (no game) · **Y** memory cards · **B** back |
-| Memory cards | **L / R** slot A / B · ▲ ▼ · **B** back |
+| System | **A** open Swiss (no game) · **Y** memory cards · **X** achievements · **B** back |
+| Memory cards | **L / R** slot A / B · ▲ ▼ · **X** backup · **B** back |
 
 Hold **B** while turning the console on to skip the menu and go straight to Swiss. **Settings → Open Swiss** (or **A** on the
 System screen) starts Swiss on its own, for everything Cube Menu does not do (game settings, cheats,

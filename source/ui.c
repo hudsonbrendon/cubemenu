@@ -214,3 +214,5 @@ void ui_scrollbar(float x, float y, float h, float pos, float frac) {
     float bh = fmaxf(20, h * frac);
     draw_round_rect(x, y + (h - bh) * clampf(pos, 0, 1), 4, bh, 2, col_alpha(th->accent, 0.9f));
 }
+
+bool ui_toast_busy(void) { return t_now - toast_t < 3.0f; }

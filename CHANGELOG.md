@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 - 2026-10-20
+
+- Apps and emulators: `/apps/<folder>` with a `.dol` / `.dol+cli` shows up on an Apps shelf with a
+  cover and description made by `cube-card build`; several versions ask which one; `.cli`
+  arguments are passed like Swiss does.
+- Game options (**X** on details): Swiss's per-game video mode, widescreen, alpha dithering and
+  anisotropic filter, collections, and cheats on / off, written to Swiss's own files. Games with
+  cheats on are launched with `AutoCheats=Yes`.
+- Collections (*Playing now*, *Want to play*, *Finished*) and a Multiplayer category; L / R skips
+  empty ones. Sort by genre. C-stick down picks a random game.
+- Achievements (System → **X**), with a notice when one unlocks; the longest session per game is
+  kept for it.
+- Memory cards: **X** backs the saves up as `.gci` to `/cubemenu/backup/`. Comments and icons of
+  every game's saves are read now (the files were opened by name, which only finds the menu's own).
+- Synopses: the game's article is found from GameTDB's title, the other languages through the
+  English article's language links, and an article whose title is shorter than the game's (the
+  series) is no longer taken. Fixes Wind Waker, Resident Evil, Pikmin, Viewtiful Joe and others.
+- The screenshots on the details screen take turns.
+
 ## 0.1.6 - 2026-10-20
 
 - **Z** on the details screen shows that game's saves. With a GCMCE / MemCard PRO GC in slot A or B,

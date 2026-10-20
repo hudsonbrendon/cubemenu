@@ -12,6 +12,7 @@
 #include "library.h"
 #include "scene3d.h"
 #include "settings.h"
+#include "swissopts.h"
 #include "theme.h"
 #include "ui.h"
 #include "trace.h"
@@ -19,6 +20,7 @@
 #include <malloc.h>
 #include <math.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +42,7 @@ static const char *pending_toast;
 static void mc_load(int slot);
 static void mc_open_game(int gi);
 static int mc_game = -1;          /* memory cards screen: >= 0 shows only that game's saves */
+static void opts_open(int gi);
 static float screen_t;
 static int view[MAX_GAMES], nview;
 static int filter = FILTER_ALL;
@@ -50,6 +53,8 @@ static bool sidebar;
 static float sidebar_a;
 static int side_list[10], nside, side_cur;
 static int disc_game = -1, disc_cur;
+static int exe_game = -1, exe_cur;     /* app with several .dol versions: which one */
+static uint32_t ach_shown;
 static float details_scroll;
 static int details_lines, details_shot;
 static int set_cur = 1;
@@ -165,7 +170,20 @@ static void jump_letter(int dir) {
     move(i - cur);
 }
 
-static const char *filter_name(int f) { return tr(f == FILTER_FAV ? S_FAVORITES : f == FILTER_RECENT ? S_RECENTLY : S_ALL_GAMES); }
+static const char *filter_name(int f) {
+    static const int N[FILTER_COUNT] = {S_ALL_GAMES, S_FAVORITES, S_RECENTLY, S_COL_PLAYING, S_COL_BACKLOG, S_COL_DONE, S_MULTIPLAYER, S_APPS};
+    return tr(N[f]);
+}
+
+/* L / R: the next category that has something in it (all games always does) */
+static int next_filter(int f, int d) {
+    int tmp[MAX_GAMES];
+    for (int k = 0; k < FILTER_COUNT; k++) {
+        f = (f + d + FILTER_COUNT) % FILTER_COUNT;
+        if (f == FILTER_ALL || f == FILTER_FAV || f == FILTER_RECENT || library_view(tmp, f, SORT_NAME)) return f;
+    }
+    return FILTER_ALL;
+}
 
 static void meta_line(char *buf, int n, const game_t *g) {
     char pt[24];
@@ -232,12 +250,13 @@ static void do_boot(void) {
     settings_save();
     game_launch_path(launch_path, sizeof launch_path, g, launch_disc);
     snprintf(arg, sizeof arg, "Autoload=%s", launch_path);
-    const char *args[1] = {arg};
+    const char *args[2] = {arg, "AutoCheats=Yes"};      /* cheats picked in the game's options */
+    int nargs = so_has_cheats_on(g->id) ? 2 : 1;
     if (!swiss) { ui_toast(tr(S_SWISS_MISSING)); screen = SCR_LIBRARY; return; }
     clip_stop();
     assets_stop();
     audio_stop();
-    boot_dol(swiss, 1, args, before_jump, err, sizeof err);
+    boot_dol(swiss, nargs, args, before_jump, err, sizeof err);
     /* only here when the DOL could not be loaded; the menu keeps running */
     char msg[160];
     snprintf(msg, sizeof msg, "%s: %s", tr(S_BOOT_ERROR), err);
@@ -246,6 +265,24 @@ static void do_boot(void) {
     audio_init();
     ui_toast(msg);
     screen = SCR_LIBRARY;
+}
+
+/* homebrew: straight to the DOL, with its .cli arguments */
+static void boot_app(int gi, int exe) {
+    game_t *g = &g_games[gi];
+    char path[256], err[96], *store;
+    const char *args[32];
+    int nargs = app_launch(g, exe, path, sizeof path, args, 32, &store);
+    stats_mark_launch(g);
+    snprintf(g_set.last_game, sizeof g_set.last_game, "%s", g->id);
+    settings_save();
+    clip_stop(); assets_stop(); audio_stop();
+    boot_dol(path, nargs, args, before_jump, err, sizeof err);
+    free(store);
+    clip_init(); assets_init(); audio_init();
+    char msg[160];
+    snprintf(msg, sizeof msg, "%s: %s", tr(S_BOOT_ERROR), err);
+    ui_toast(msg);
 }
 
 static void open_swiss(void) {
@@ -274,6 +311,12 @@ static void start_launch(int gi, int disc) {
 }
 
 static void request_launch(int gi) {
+    if (g_games[gi].is_app) {
+        if (g_games[gi].nexe > 1) { exe_game = gi; exe_cur = 0; audio_sfx(SFX_OPEN); return; }
+        audio_sfx(SFX_SELECT);
+        boot_app(gi, 0);
+        return;
+    }
     if (g_games[gi].ndisc > 1) { disc_game = gi; disc_cur = 0; audio_sfx(SFX_OPEN); return; }
     audio_sfx(SFX_SELECT);
     start_launch(gi, 0);
@@ -337,7 +380,7 @@ static void draw_case_at(int i, bool reflect) {
     bool selected = i == cur && fabsf(i - pos_s) < 0.5f;
     float disc_out = 0, sway = 0;
     if (selected) {
-        if (g_set.show_disc) disc_out = ease_io((sel_t - 0.35f) / 0.7f);
+        if (g_set.show_disc && !g_games[g].is_app) disc_out = ease_io((sel_t - 0.35f) / 0.7f);
         sway = sinf(ui_time() * 0.9f) * 6 * clampf(sel_t / 0.8f, 0, 1);
     }
     gfx_push();
@@ -433,7 +476,7 @@ static void draw_list(void) {
     gfx_push();
     gfx_translate(150, 6, 40);
     gfx_rotate('y', -18 + sinf(ui_time() * 0.6f) * 14);
-    float disc_out = g_set.show_disc ? ease_io((sel_t - 0.35f) / 0.7f) : 0;
+    float disc_out = g_set.show_disc && !g->is_app ? ease_io((sel_t - 0.35f) / 0.7f) : 0;
     case3d(assets_get(view[cur], AS_CASE), assets_get(view[cur], AS_DISC), 1, disc_out, ui_time() * 2.2f, false);
     gfx_pop();
     gfx_2d();
@@ -491,7 +534,28 @@ static void draw_sidebar(void) {
     }
 }
 
+static void draw_exe_modal(void) {
+    if (exe_game < 0) return;
+    game_t *g = &g_games[exe_game];
+    draw_rect(0, 0, SCREEN_W, SCREEN_H, 0x000000A0);
+    int vis = g->nexe < 9 ? g->nexe : 9;
+    float rh = 26, w = 340, h = 64 + vis * rh, x = (SCREEN_W - w) / 2, y = (SCREEN_H - h) / 2 - 10;
+    ui_panel(x, y, w, h, 1.4f);
+    draw_text_center(&g_font_m, SCREEN_W / 2, y + 14, th->text_hi, tr(S_CHOOSE_VERSION));
+    int first = exe_cur - vis / 2;
+    if (first > g->nexe - vis) first = g->nexe - vis;
+    if (first < 0) first = 0;
+    for (int i = first; i < first + vis; i++) {
+        float ry = y + 52 + (i - first) * rh;
+        bool sel = i == exe_cur;
+        if (sel) draw_round_rect(x + 14, ry - 2, w - 28, rh - 2, 8, col_alpha(th->accent, 0.95f));
+        const char *v = app_variant(g, i);
+        draw_text_fit(&g_font_s, x + 26, ry + 1, w - 52, sel ? 0x14102EFF : th->text, v ? v : tr(S_MAIN_VERSION));
+    }
+}
+
 static void draw_disc_modal(void) {
+    draw_exe_modal();
     if (disc_game < 0) return;
     game_t *g = &g_games[disc_game];
     draw_rect(0, 0, SCREEN_W, SCREEN_H, 0x000000A0);
@@ -513,6 +577,13 @@ static void draw_disc_modal(void) {
 }
 
 static void update_library(uint32_t p, float dt) {
+    if (exe_game >= 0) {
+        if (p & BTN_UP && exe_cur > 0) { exe_cur--; audio_sfx(SFX_MOVE); }
+        if (p & BTN_DOWN && exe_cur < g_games[exe_game].nexe - 1) { exe_cur++; audio_sfx(SFX_MOVE); }
+        if (p & BTN_A) { audio_sfx(SFX_SELECT); int gi = exe_game; exe_game = -1; boot_app(gi, exe_cur); }
+        if (p & BTN_B) { exe_game = -1; audio_sfx(SFX_BACK); }
+        return;
+    }
     if (disc_game >= 0) {
         if (p & (BTN_LEFT | BTN_UP)) { if (disc_cur > 0) { disc_cur--; audio_sfx(SFX_MOVE); } }
         if (p & (BTN_RIGHT | BTN_DOWN)) { if (disc_cur < g_games[disc_game].ndisc - 1) { disc_cur++; audio_sfx(SFX_MOVE); } }
@@ -530,7 +601,7 @@ static void update_library(uint32_t p, float dt) {
     if (!nview) {
         if (p & BTN_X) { screen = SCR_SETTINGS; screen_t = 0; set_cur = I_THEME; audio_sfx(SFX_OPEN); }
         if (p & BTN_START) { screen = SCR_SYSTEM; screen_t = 0; audio_sfx(SFX_OPEN); }
-        if (p & (BTN_L | BTN_R)) { filter = (filter + (p & BTN_R ? 1 : FILTER_COUNT - 1)) % FILTER_COUNT; rebuild_view(NULL); audio_sfx(SFX_OPEN); }
+        if (p & (BTN_L | BTN_R)) { filter = next_filter(filter, p & BTN_R ? 1 : -1); rebuild_view(NULL); audio_sfx(SFX_OPEN); }
         return;
     }
     int step_h = 1, step_v = 0;
@@ -542,8 +613,14 @@ static void update_library(uint32_t p, float dt) {
     if (step_v && (p & BTN_DOWN)) move(step_v);
     if (p & BTN_CLEFT) jump_letter(-1);
     if (p & BTN_CRIGHT) jump_letter(1);
+    if ((p & BTN_CDOWN) && nview > 1) {         /* a random game */
+        int n = cur;
+        while (n == cur) n = rand() % nview;
+        move(n - cur);
+        ui_toast(tr(S_SURPRISE));
+    }
     if (p & (BTN_L | BTN_R)) {
-        filter = (filter + (p & BTN_R ? 1 : FILTER_COUNT - 1)) % FILTER_COUNT;
+        filter = next_filter(filter, p & BTN_R ? 1 : -1);
         game_t *g = cur_game();
         rebuild_view(g ? g->id : NULL);
         audio_sfx(SFX_OPEN);
@@ -610,17 +687,18 @@ static void draw_library(void) {
 static void update_details(uint32_t p) {
     game_t *g = cur_game();
     if (!g) { screen = SCR_LIBRARY; return; }
-    if (disc_game >= 0) { update_library(p, 0); return; }
+    if (disc_game >= 0 || exe_game >= 0) { update_library(p, 0); return; }
     if (p & (BTN_L | BTN_LEFT)) { move(-1); details_scroll = 0; }
     if (p & (BTN_R | BTN_RIGHT)) { move(1); details_scroll = 0; }
     if (p & BTN_UP) details_scroll -= 1;
     if (p & BTN_DOWN) details_scroll += 1;
     if (details_scroll > details_lines - 8) details_scroll = details_lines - 8;
     if (details_scroll < 0) details_scroll = 0;
-    if (p & BTN_X) details_shot ^= 1;
+    details_shot = (int)(screen_t / 4) & 1;      /* the two screenshots take turns */
     if (p & BTN_A) request_launch(view[cur]);
     if (p & BTN_Y) { g->favorite = !g->favorite; stats_save(); audio_sfx(SFX_SELECT); }
-    if (p & BTN_Z) { audio_sfx(SFX_OPEN); mc_open_game(view[cur]); return; }
+    if ((p & BTN_Z) && !g->is_app) { audio_sfx(SFX_OPEN); mc_open_game(view[cur]); return; }
+    if ((p & BTN_X) && !g->is_app) { audio_sfx(SFX_OPEN); opts_open(view[cur]); return; }
     if (p & BTN_B) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
     assets_want_shots(view[cur]);
 }
@@ -712,9 +790,15 @@ static void draw_details(void) {
     if (details_lines > vis) ui_scrollbar(rx + 268, y, sh - 6, details_scroll / (float)(details_lines - vis), vis / (float)details_lines);
     if (g->favorite) draw_circle(rx + 268, 92, 6, 0xF4C21AFF);
 
-    static const int gl[] = {G_A, G_B, G_Y, G_Z, G_LR, G_DPAD};
-    const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_FAVORITE), tr(S_SAVES), tr(S_PREV_NEXT), tr(S_SCROLL)};
-    ui_hints(gl, lb, 6);
+    if (g->is_app) {
+        static const int gl[] = {G_A, G_B, G_Y, G_LR, G_DPAD};
+        const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_FAVORITE), tr(S_PREV_NEXT), tr(S_SCROLL)};
+        ui_hints(gl, lb, 5);
+    } else {
+        static const int gl[] = {G_A, G_B, G_X, G_Y, G_Z, G_LR};
+        const char *lb[] = {tr(S_PLAY), tr(S_BACK), tr(S_OPTIONS), tr(S_FAVORITE), tr(S_SAVES), tr(S_PREV_NEXT)};
+        ui_hints(gl, lb, 6);
+    }
     draw_disc_modal();
 }
 
@@ -745,7 +829,7 @@ static const char *item_value(int i, char *buf, int n) {
     case I_MENUMUSIC: return onoff(g_set.menu_music);
     case I_SFX: return onoff(g_set.sfx);
     case I_VOLUME: snprintf(buf, n, "%d%%", g_set.volume * 10); return buf;
-    case I_SORT: return tr(S_SORT_NAME + g_set.sort);
+    case I_SORT: return tr(g_set.sort == SORT_GENRE ? S_SORT_GENRE : S_SORT_NAME + g_set.sort);
     case I_CLOCK24: return onoff(g_set.clock24);
     case I_CLOCKADJ: { char clk[16]; ui_clock_string(clk, sizeof clk);
         snprintf(buf, n, "%s  (%+d:%02d)", clk, g_set.clock_offset / 60, abs(g_set.clock_offset) % 60); return buf; }
@@ -850,6 +934,7 @@ static void draw_settings(void) {
 static void update_system(uint32_t p) {
     if (p & BTN_A) { audio_sfx(SFX_SELECT); open_swiss(); }
     if (p & BTN_Y) { audio_sfx(SFX_OPEN); screen = SCR_MEMCARD; screen_t = 0; mc_game = -1; mc_load(0); }
+    if (p & BTN_X) { audio_sfx(SFX_OPEN); screen = SCR_ACHIEV; screen_t = 0; }
     if (p & (BTN_B | BTN_START)) { screen = SCR_LIBRARY; audio_sfx(SFX_BACK); }
 }
 
@@ -896,9 +981,9 @@ static void draw_system(void) {
     }
     if (!shown) draw_text_wrap(&g_font_s, rx, ry + 44, 250, 20, 0, 6, th->text_dim, tr(S_NEVER_PLAYED));
     draw_text_center(&g_font_s, SCREEN_W / 2, 398, th->text_dim, tr(S_ABOUT_LINE));
-    static const int gl[] = {G_A, G_Y, G_B};
-    const char *lb[] = {tr(S_OPEN_SWISS), tr(S_MEMCARDS), tr(S_BACK)};
-    ui_hints(gl, lb, 3);
+    static const int gl[] = {G_A, G_Y, G_X, G_B};
+    const char *lb[] = {tr(S_OPEN_SWISS), tr(S_MEMCARDS), tr(S_ACHIEVEMENTS), tr(S_BACK)};
+    ui_hints(gl, lb, 4);
 }
 
 /* ---------------- memory cards ---------------- */
@@ -957,11 +1042,29 @@ static void mc_open_game(int gi) {
     mc_scan(slot < 0 ? 0 : slot, 1);
 }
 
+/* X: the saves on screen to /cubemenu/backup/<date>-<slot>/ as .gci (Swiss / Dolphin import them) */
+static void mc_backup(void) {
+    char rel[96], dir[160], msg[160];
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    mkdir(fs_path(dir, sizeof dir, "/cubemenu/backup"), 0777);
+    snprintf(rel, sizeof rel, "/cubemenu/backup/%04d%02d%02d-%02d%02d%02d-%c", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+             tm->tm_hour, tm->tm_min, tm->tm_sec, 'A' + mc_slot);
+    fs_path(dir, sizeof dir, rel);
+    mc_msg(tr(S_READING));
+    int n = memcard_backup(mc_slot, mc_game >= 0 ? g_games[mc_game].id : NULL, dir);
+    if (n < 0) snprintf(msg, sizeof msg, "%s", tr(S_BACKUP_FAIL));
+    else snprintf(msg, sizeof msg, tr(S_BACKUP_DONE), n, rel + 1);
+    ui_toast(msg);
+    audio_sfx(n < 0 ? SFX_BACK : SFX_SELECT);
+}
+
 static void update_memcard(uint32_t p) {
     if (p & (BTN_L | BTN_R | BTN_LEFT | BTN_RIGHT)) { audio_sfx(SFX_OPEN); mc_load(!mc_slot); }
     if (p & BTN_UP && mc_cur > 0) { mc_cur--; audio_sfx(SFX_MOVE); }
     if (p & BTN_DOWN && mc_cur < nsaves - 1) { mc_cur++; audio_sfx(SFX_MOVE); }
     if (p & BTN_B) { if (nsaves > 0) memcard_free(saves, nsaves); nsaves = 0; screen = mc_game >= 0 ? SCR_DETAILS : SCR_SYSTEM; audio_sfx(SFX_BACK); }
+    if ((p & BTN_X) && nsaves > 0 && fs_writable()) mc_backup();
 }
 
 static void draw_memcard(void) {
@@ -1018,9 +1121,174 @@ static void draw_memcard(void) {
         }
         ui_scrollbar(SCREEN_W - x + 14, y0, vis * rh - 8, nsaves > vis ? mc_scroll / (nsaves - vis) : 0, vis / (float)(nsaves ? nsaves : 1));
     }
-    static const int gl[] = {G_LR, G_DPAD, G_B};
-    const char *lb[] = {tr(S_SLOT), tr(S_SCROLL), tr(S_BACK)};
+    static const int gl[] = {G_LR, G_X, G_DPAD, G_B};
+    const char *lb[] = {tr(S_SLOT), tr(S_BACKUP), tr(S_SCROLL), tr(S_BACK)};
+    ui_hints(gl, lb, 4);
+}
+
+/* ---------------- game options: Swiss video settings, collections, cheats ---------------- */
+
+enum { OR_HEADER, OR_SWISS, OR_COLLECTION, OR_CHEAT, OR_INFO };
+typedef struct { int kind, idx, label; } opt_row;
+static opt_row orows[160];
+static int norows, ocur, ogame;
+static float oscroll;
+static swiss_game_t ogs;
+
+static void opts_add(int kind, int idx, int label) {
+    if (norows < (int)(sizeof orows / sizeof *orows)) orows[norows++] = (opt_row){kind, idx, label};
+}
+
+static bool opts_selectable(int i) { return orows[i].kind != OR_HEADER && orows[i].kind != OR_INFO; }
+
+static void opts_open(int gi) {
+    ogame = gi;
+    so_free(&ogs);
+    so_load(&ogs, g_games[gi].id);
+    norows = 0;
+    opts_add(OR_HEADER, 0, S_SEC_SWISS);
+    static const int SL[SO_COUNT] = {S_VIDEO_MODE, S_WIDESCREEN, S_NO_DITHER, S_ANISO};
+    for (int i = 0; i < SO_COUNT; i++) opts_add(OR_SWISS, i, SL[i]);
+    opts_add(OR_HEADER, 0, S_SEC_COLLECTIONS);
+    opts_add(OR_COLLECTION, COL_PLAYING, S_COL_PLAYING);
+    opts_add(OR_COLLECTION, COL_BACKLOG, S_COL_BACKLOG);
+    opts_add(OR_COLLECTION, COL_DONE, S_COL_DONE);
+    opts_add(OR_HEADER, 0, S_SEC_CHEATS);
+    if (!ogs.ncheats) opts_add(OR_INFO, 0, S_NO_CHEATS);
+    for (int i = 0; i < ogs.ncheats; i++) opts_add(OR_CHEAT, i, 0);
+    ocur = 1;
+    oscroll = 0;
+    screen = SCR_GAMEOPTS;
+    screen_t = 0;
+}
+
+static void opts_change(int i, int d) {
+    opt_row *r = &orows[i];
+    game_t *g = &g_games[ogame];
+    if (r->kind == OR_SWISS) { int n = so_nvalues(r->idx); ogs.value[r->idx] = (ogs.value[r->idx] + d + n) % n; }
+    if (r->kind == OR_COLLECTION) g->collections ^= r->idx;
+    if (r->kind == OR_CHEAT) ogs.cheat_on[r->idx] ^= 1;
+}
+
+static void update_gameopts(uint32_t p) {
+    int d = p & BTN_UP ? -1 : p & BTN_DOWN ? 1 : 0;
+    if (d) {
+        int n = ocur;
+        do { n += d; } while (n >= 0 && n < norows && !opts_selectable(n));
+        if (n >= 0 && n < norows) { ocur = n; audio_sfx(SFX_MOVE); }
+    }
+    if (p & (BTN_LEFT | BTN_RIGHT | BTN_A)) { opts_change(ocur, p & BTN_LEFT ? -1 : 1); audio_sfx(SFX_MOVE); }
+    if (p & BTN_B) {
+        game_t *g = &g_games[ogame];
+        bool ok = so_save(&ogs, g->id, g->name);
+        stats_save();
+        so_free(&ogs);
+        if (fs_writable()) ui_toast(tr(ok ? S_SAVED : S_SAVE_FAILED));
+        screen = SCR_DETAILS;
+        audio_sfx(SFX_BACK);
+    }
+}
+
+static const char *opts_value(const opt_row *r) {
+    switch (r->kind) {
+    case OR_SWISS: {
+        int v = ogs.value[r->idx];
+        if (r->idx == SO_VIDEO) return v ? so_value(SO_VIDEO, v) : tr(S_AUTO);
+        if (r->idx == SO_WIDESCREEN) return v ? so_value(SO_WIDESCREEN, v) : tr(S_OFF);
+        return tr(v ? S_ON : S_OFF);
+    }
+    case OR_COLLECTION: return tr(g_games[ogame].collections & r->idx ? S_ON : S_OFF);
+    case OR_CHEAT: return tr(ogs.cheat_on[r->idx] ? S_ON : S_OFF);
+    }
+    return "";
+}
+
+static void draw_gameopts(void) {
+    game_t *g = &g_games[ogame];
+    ui_background(g_set.bg_video ? 0.35f : 0);
+    ui_topbar(tr(S_GAME_OPTIONS), g->name);
+    float x = 70, w = 500, y0 = 82, rh = 24, vis = 13.5f;
+    ui_panel(x - 16, y0 - 12, w + 32, vis * rh + 18, 1.2f);
+    float target = ocur - 6;
+    if (target > norows - vis) target = norows - vis;
+    if (target < 0) target = 0;
+    oscroll += (target - oscroll) * 0.25f;
+    for (int i = 0; i < norows; i++) {
+        float y = y0 + (i - oscroll) * rh;
+        if (y < y0 - 8 || y > y0 + (vis - 1) * rh) continue;
+        opt_row *r = &orows[i];
+        if (r->kind == OR_HEADER) {
+            char hb[48];
+            const char *h = tr(r->label);
+            if (r->label == S_SEC_CHEATS && ogs.ncheats) {
+                int on = 0;
+                for (int k = 0; k < ogs.ncheats; k++) on += ogs.cheat_on[k];
+                snprintf(hb, sizeof hb, "%s  ·  ", h);
+                snprintf(hb + strlen(hb), sizeof hb - strlen(hb), tr(S_CHEATS_ON), on);
+                h = hb;
+            }
+            draw_text(&g_font_s, x, y + 3, th->accent, h);
+            float tw = text_width(&g_font_s, h);
+            draw_rect(x + tw + 10, y + 13, w - tw - 10, 1, col_alpha(th->accent, 0.35f));
+            continue;
+        }
+        if (r->kind == OR_INFO) { draw_text(&g_font_s, x + 10, y + 2, th->text_dim, tr(r->label)); continue; }
+        bool sel = i == ocur;
+        if (sel) draw_round_rect(x - 8, y, w + 16, rh - 2, 8, col_alpha(th->accent, 0.95f));
+        uint32_t tc = sel ? 0x14102EFF : th->text;
+        const char *label = r->kind == OR_CHEAT ? ogs.cheat_name[r->idx] : tr(r->label);
+        const char *v = opts_value(r);
+        draw_text_fit(&g_font_s, x + 10, y + 2, w - 40 - text_width(&g_font_s, v), tc, label);
+        bool on = (r->kind == OR_CHEAT && ogs.cheat_on[r->idx]) || (r->kind == OR_COLLECTION && (g->collections & r->idx));
+        draw_text_right(&g_font_s, x + w - 14, y + 2, sel ? 0x14102EFF : on ? th->accent : th->text_hi, v);
+    }
+    static const int gl[] = {G_DPAD, G_A, G_B};
+    const char *lb[] = {tr(S_CHANGE), tr(S_TOGGLE), tr(S_SAVE)};
     ui_hints(gl, lb, 3);
+}
+
+/* ---------------- achievements ---------------- */
+
+static void update_achiev(uint32_t p) {
+    if (p & (BTN_B | BTN_START)) { screen = SCR_SYSTEM; audio_sfx(SFX_BACK); }
+}
+
+static void draw_achiev(void) {
+    ui_background(0);
+    uint32_t m = achievements();
+    int n = 0;
+    for (int i = 0; i < ACH_COUNT; i++) n += (m >> i) & 1;
+    char sub[32];
+    snprintf(sub, sizeof sub, tr(S_ACH_COUNT), n, ACH_COUNT);
+    ui_topbar(tr(S_ACHIEVEMENTS), sub);
+    for (int i = 0; i < ACH_COUNT; i++) {
+        bool on = (m >> i) & 1;
+        float x = 40 + (i % 2) * 284, y = 76 + (i / 2) * 64, w = 272, h = 56;
+        float in = ease_out(clampf((screen_t - i * 0.04f) / 0.3f, 0, 1));
+        ui_panel(x, y, w, h, (on ? 1.4f : 0.8f) * in);
+        float cx = x + 30, cy = y + h / 2;
+        if (on) draw_glow(cx, cy, 34, col_alpha(th->accent, 0.35f * in));
+        draw_circle(cx, cy, 19, col_alpha(on ? th->accent : th->text_dim, (on ? 1 : 0.25f) * in));
+        draw_tex(&g_tex_emblem, cx - 13, cy - 13, 26, 26, col_alpha(on ? 0xFFFFFFFF : 0xFFFFFF50, in));
+        draw_text_fit(&g_font_s, x + 58, y + 9, w - 66, col_alpha(on ? th->text_hi : th->text_dim, in), tr(S_ACH_FIRST + i * 2));
+        draw_text_fit(&g_font_s, x + 58, y + 29, w - 66, col_alpha(th->text_dim, in * (on ? 1 : 0.7f)), tr(S_ACH_FIRST_D + i * 2));
+    }
+    static const int gl[] = {G_B};
+    const char *lb[] = {tr(S_BACK)};
+    ui_hints(gl, lb, 1);
+}
+
+/* a toast per new achievement, one at a time */
+static void achievement_toasts(void) {
+    uint32_t nw = achievements_new() & ~ach_shown;
+    if (!nw || ui_toast_busy() || screen == SCR_INTRO || screen == SCR_LAUNCH) return;
+    int i = 0;
+    while (!((nw >> i) & 1)) i++;
+    ach_shown |= 1u << i;
+    char msg[96];
+    snprintf(msg, sizeof msg, tr(S_ACH_UNLOCKED), tr(S_ACH_FIRST + i * 2));
+    ui_toast(msg);
+    audio_sfx(SFX_SELECT);
 }
 
 /* ---------------- launch scene ---------------- */
@@ -1160,12 +1428,15 @@ void app_frame(float dt) {
     case SCR_SETTINGS: update_settings(p); break;
     case SCR_SYSTEM: update_system(p); break;
     case SCR_MEMCARD: update_memcard(p); break;
+    case SCR_GAMEOPTS: update_gameopts(p); break;
+    case SCR_ACHIEV: update_achiev(p); break;
     case SCR_LAUNCH:
         launch_t += dt;
         if (launch_t >= LAUNCH_T_END + 0.2f) do_boot();
         break;
     }
 
+    achievement_toasts();
     u64 tf1 = gettime();
     gfx_begin(th->bg_top);
     switch (screen) {
@@ -1175,6 +1446,8 @@ void app_frame(float dt) {
     case SCR_SETTINGS: draw_settings(); break;
     case SCR_SYSTEM: draw_system(); break;
     case SCR_MEMCARD: draw_memcard(); break;
+    case SCR_GAMEOPTS: draw_gameopts(); break;
+    case SCR_ACHIEV: draw_achiev(); break;
     case SCR_LAUNCH: draw_launch(dt); break;
     }
     if (saver) draw_saver();

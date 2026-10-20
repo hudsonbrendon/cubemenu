@@ -23,7 +23,15 @@ typedef struct {
     uint32_t launches;
     uint32_t last_played;             /* unix time */
     bool favorite;
+    uint8_t collections;              /* COL_* bits */
+    uint32_t best_session;            /* longest credited session, seconds */
+    /* homebrew from /apps/<folder>: folder is "/apps/<folder>", exe[] its .dol / .dol+cli files */
+    bool is_app;
+    char (*exe)[48];
+    int nexe;
 } game_t;
+
+enum { COL_PLAYING = 1, COL_BACKLOG = 2, COL_DONE = 4 };
 
 extern game_t g_games[MAX_GAMES];
 extern int g_ngames;
@@ -33,6 +41,14 @@ const char *game_synopsis(const game_t *g, int lang);     /* falls back to anoth
 const char *game_genre(const game_t *g, int lang);        /* translated when known */
 void game_asset_path(char *buf, int n, const game_t *g, const char *file);   /* /cubemenu/games/<ID>/file */
 int game_launch_path(char *buf, int n, const game_t *g, int disc);            /* "gcldr:/games/X/game.iso" */
+/* "gcldr:/apps/gbi/gbi-ossc.dol+cli" and its arguments (the .cli next to a .dol, or the text after
+ * the DOL in a .dol+cli); returns the argument count, args point into *store (free() it) */
+int app_launch(const game_t *g, int exe, char *path, int n, const char **args, int maxargs, char **store);
+const char *app_variant(const game_t *g, int exe);    /* "ossc" for gbi-ossc.dol+cli, NULL for the main one */
+/* achievements: bit mask of the unlocked ones (ACH_COUNT of them) */
+enum { ACH_FIRST, ACH_10H, ACH_50H, ACH_100H, ACH_LIBRARY, ACH_MARATHON, ACH_DEVOTED, ACH_FINISHER, ACH_CURATOR, ACH_EXPLORER, ACH_COUNT };
+uint32_t achievements(void);
+uint32_t achievements_new(void);      /* unlocked since the last boot (read by stats_load) */
 
 /* stats (play time is measured across reboots: the launch time is saved, the next boot of the
  * menu credits the elapsed time to that game) */
@@ -43,6 +59,6 @@ const char *stats_credit_message(void);   /* "+1h 20m in Pikmin" after a credite
 void fmt_playtime(char *buf, int n, uint32_t secs);
 
 /* views over the library */
-enum { FILTER_ALL, FILTER_FAV, FILTER_RECENT, FILTER_COUNT };
-enum { SORT_NAME, SORT_RECENT, SORT_PLAYTIME, SORT_YEAR, SORT_COUNT };
+enum { FILTER_ALL, FILTER_FAV, FILTER_RECENT, FILTER_PLAYING, FILTER_BACKLOG, FILTER_DONE, FILTER_MULTI, FILTER_APPS, FILTER_COUNT };
+enum { SORT_NAME, SORT_RECENT, SORT_PLAYTIME, SORT_YEAR, SORT_GENRE, SORT_COUNT };
 int library_view(int *out, int filter, int sort);

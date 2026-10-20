@@ -9,6 +9,7 @@ mkdir -p "$OUT/tools/cube_card"
 cp dist/boot.iso dist/cubemenu.dol README.md LICENSE CHANGELOG.md "$OUT/"
 cp tools/__init__.py "$OUT/tools/"
 cp tools/cube_card/*.py "$OUT/tools/cube_card/"
+mkdir -p "$OUT/assets/fonts" && cp assets/fonts/*.ttf assets/fonts/OFL.txt "$OUT/assets/fonts/"
 cp -r docs "$OUT/docs"
 rm -rf "$OUT/docs/screenshots"
 (cd dist && zip -qr "cubemenu-$V.zip" "cubemenu-$V")

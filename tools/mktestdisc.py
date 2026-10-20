@@ -15,6 +15,7 @@ def main():
     p.add_argument("sd"); p.add_argument("out"); p.add_argument("--demo"); p.add_argument("--only")
     p.add_argument("--settings"); p.add_argument("--dol", default="dist/cubemenu.dol"); p.add_argument("--stats")
     p.add_argument("--no-clips", action="store_true"); p.add_argument("--swiss", help="DOL to put at /swiss/boot.dol")
+    p.add_argument("--apps", action="store_true", help="also /apps and Swiss's game settings and cheats")
     a = p.parse_args()
     games = scan(a.sd)
     if a.only: games = [g for g in games if g["id"] in a.only.split(",")]
@@ -33,6 +34,15 @@ def main():
                     if fn.startswith("."): continue
                     if a.no_clips and fn == "clip.cmv": continue
                     shutil.copyfile(os.path.join(src, fn), os.path.join(dst, fn))
+        if a.apps:          # homebrew (the DOLs and their .cli) + Swiss's per-game settings and cheats
+            from tools.cube_card import apps
+            for gid, name in apps.apps(a.sd):
+                shutil.copytree(os.path.join(a.sd, "apps", name), os.path.join(tmp, "apps", name), ignore=shutil.ignore_patterns(".*", "*.uf2", "*.dcp"))
+                src = os.path.join(a.sd, "cubemenu", "games", gid)
+                if os.path.isdir(src): shutil.copytree(src, os.path.join(tmp, "cubemenu", "games", gid), ignore=shutil.ignore_patterns(".*"))
+            for sub in ("settings/game", "cheats"):
+                d = os.path.join(a.sd, "swiss", sub)
+                if os.path.isdir(d): shutil.copytree(d, os.path.join(tmp, "swiss", sub), ignore=shutil.ignore_patterns(".*"))
         music = os.path.join(a.sd, "cubemenu", "music")
         if os.path.isdir(music):
             shutil.copytree(music, os.path.join(tmp, "cubemenu", "music"), ignore=shutil.ignore_patterns(".*"))

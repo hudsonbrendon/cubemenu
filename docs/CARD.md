@@ -20,7 +20,9 @@
 /cubemenu/games/<GAMEID>/         console files (cube-card build)
 /cubemenu/music/*.mp3             optional menu music, played when a game has no theme
 /cubemenu/settings.ini            written by the menu
-/cubemenu/stats.ini               play time, launches, favourites
+/cubemenu/stats.ini               play time, launches, favourites, collections, achievements
+/cubemenu/backup/                 memory card backups (.gci)
+/apps/<Name>/*.dol, *.dol+cli     homebrew; cube-card build makes its cover and description
 ```
 
 `.iso` and `.gcm` images are read. Tags such as `(v1.01)` or `(Player's Choice)` in the folder name are
